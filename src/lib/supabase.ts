@@ -13,8 +13,6 @@ const isUsingMockClient =
   supabaseAnonKey === 'your-anon-key-here' ||
   supabaseAnonKey === 'placeholder-key';
 
-
-  
 // Create a mock client if no real credentials are provided
 const createSupabaseClient = () => {
   if (isUsingMockClient) {
@@ -52,6 +50,7 @@ const createSupabaseClient = () => {
             id: email.includes('owner') || email.includes('admin') ? 'mock-owner-id' : 'mock-user-id',
             email,
             user_metadata: {
+              name: email.split('@')[0],
               role: email.includes('owner') || email.includes('admin') ? 'owner' : 'user'
             }
           };
@@ -73,42 +72,104 @@ const createSupabaseClient = () => {
         getSession: async () => {
           return { data: { session: null }, error: null };
         },
+        getUser: async () => {
+          return { data: { user: null }, error: null };
+        },
         onAuthStateChange: (callback: any) => {
           console.log('Mock onAuthStateChange');
           // Call the callback immediately with no session for initial state
           setTimeout(() => callback('SIGNED_OUT', null), 0);
           return { data: { subscription: { unsubscribe: () => {} } } };
         },
-        getUser: async () => {
-          return { data: { user: null }, error: null };
+        resend: async ({ type, email }: any) => {
+          console.log('Mock resend:', { type, email });
+          return { error: null };
         }
       },
-      from: (table: string) => ({
-        select: (columns?: string) => ({
-          eq: (column: string, value: any) => ({
-            single: async () => ({ data: null, error: null }),
-            maybeSingle: async () => ({ data: null, error: null }),
-            then: async (callback: any) => callback({ data: [], error: null })
-          }),
-          then: async (callback: any) => callback({ data: [], error: null })
-        }),
-        insert: (data: any) => ({ 
-          select: () => ({
-            single: async () => ({ data: null, error: null })
-          }),
-          then: async (callback: any) => callback({ data: null, error: null })
-        }),
-        update: (data: any) => ({ 
-          eq: (column: string, value: any) => ({ 
-            then: async (callback: any) => callback({ data: null, error: null })
+      from: (table: string) => {
+        console.log('Mock query on table:', table);
+        return {
+          select: (columns?: string) => {
+            console.log('Mock select:', columns);
+            return {
+              eq: (column: string, value: any) => {
+                console.log('Mock eq:', column, value);
+                return {
+                  single: async () => {
+                    console.log('Mock single query');
+                    // Simulate no profile found for initial case
+                    return { data: null, error: { code: 'PGRST116', message: 'No rows found' } };
+                  },
+                  maybeSingle: async () => {
+                    console.log('Mock maybeSingle query');
+                    // Simulate no profile found
+                    return { data: null, error: null };
+                  },
+                  then: async (callback: any) => {
+                    console.log('Mock then callback');
+                    return callback({ data: [], error: null });
+                  }
+                };
+              },
+              then: async (callback: any) => {
+                console.log('Mock select then callback');
+                return callback({ data: [], error: null });
+              }
+            };
+          },
+          insert: (data: any) => {
+            console.log('Mock insert:', data);
+            return { 
+              select: () => ({
+                single: async () => {
+                  console.log('Mock insert single');
+                  // Return the inserted data with timestamps
+                  const insertedData = {
+                    ...data,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                  };
+                  return { data: insertedData, error: null };
+                }
+              }),
+              then: async (callback: any) => {
+                console.log('Mock insert then callback');
+                const insertedData = {
+                  ...data,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                };
+                return callback({ data: insertedData, error: null });
+              }
+            };
+          },
+          update: (data: any) => {
+            console.log('Mock update:', data);
+            return { 
+              eq: (column: string, value: any) => {
+                console.log('Mock update eq:', column, value);
+                return { 
+                  then: async (callback: any) => {
+                    console.log('Mock update then callback');
+                    return callback({ data: null, error: null });
+                  }
+                };
+              }
+            };
+          },
+          delete: () => ({
+            eq: (column: string, value: any) => {
+              console.log('Mock delete eq:', column, value);
+              return {
+                then: async (callback: any) => {
+                  console.log('Mock delete then callback');
+                  return callback({ data: null, error: null });
+                }
+              };
+            }
           })
-        }),
-        delete: () => ({
-          eq: (column: string, value: any) => ({
-            then: async (callback: any) => callback({ data: null, error: null })
-          })
-        })
-      }),
+        };
+      },
       storage: {
         from: (bucket: string) => ({
           upload: async (path: string, file: File) => ({ data: { path }, error: null }),
@@ -131,6 +192,8 @@ export interface Profile {
   phone?: string;
   role: 'user' | 'owner' | 'admin';
   avatar_url?: string;
+  business_name?: string;
+  business_address?: string;
   created_at: string;
   updated_at: string;
 }

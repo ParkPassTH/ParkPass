@@ -61,11 +61,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('Loading profile for user:', userId);
       
-      const { data: profile, error } = await supabase
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Profile loading timeout')), 5000);
+      });
+
+      const profilePromise = supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
+
+      const { data: profile, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
+
+      console.log('Profile query result:', { profile, error });
 
       if (error) {
         console.error('Error loading profile:', error);
@@ -83,12 +92,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return;
         }
         
-        // For other errors, create a basic profile if user exists
-        if (error.code === 'PGRST116' || !profile) {
-          console.log('Profile not found, creating basic profile');
-          await createBasicProfile(userId);
-          return;
-        }
+        // For other errors or no profile found, create a basic profile
+        console.log('Profile not found or error occurred, creating basic profile');
+        await createBasicProfile(userId);
+        return;
       } else if (!profile) {
         console.log('No profile found, creating basic profile');
         await createBasicProfile(userId);
@@ -99,6 +106,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (error: any) {
       console.error('Error loading profile:', error);
+      
+      // Handle timeout or other errors
+      if (error.message === 'Profile loading timeout') {
+        console.log('Profile loading timed out, creating basic profile');
+        await createBasicProfile(userId);
+        return;
+      }
       
       // Handle fetch/network errors
       if (error.message && error.message.toLowerCase().includes('jwt')) {
@@ -141,13 +155,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         business_address: user.user_metadata?.business_address || null,
       };
 
-      const { data: newProfile, error } = await supabase
+      console.log('Attempting to insert profile:', basicProfile);
+
+      // Add timeout for insert operation
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Profile creation timeout')), 5000);
+      });
+
+      const insertPromise = supabase
         .from('profiles')
         .insert(basicProfile)
         .select()
         .single();
 
-      if (error) {
+      const { data: newProfile, error } = await Promise.race([insertPromise, timeoutPromise]) as any;
+
+      console.log('Profile insert result:', { newProfile, error });
+
+      if (error || !newProfile) {
         console.error('Error creating basic profile:', error);
         // If we can't create a profile, create a mock one for the session
         const mockProfile: Profile = {
