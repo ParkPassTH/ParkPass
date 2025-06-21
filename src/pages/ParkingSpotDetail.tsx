@@ -91,12 +91,18 @@ export const ParkingSpotDetail: React.FC = () => {
     }
   };
 
-  const nextImage = () => {
+  const nextImage = (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
     if (!spot || !spot.images || spot.images.length <= 1) return;
     setCurrentImageIndex((prev) => (prev + 1) % spot.images.length);
   };
 
-  const prevImage = () => {
+  const prevImage = (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
     if (!spot || !spot.images || spot.images.length <= 1) return;
     setCurrentImageIndex((prev) => (prev === 0 ? spot.images.length - 1 : prev - 1));
   };
@@ -499,7 +505,7 @@ export const ParkingSpotDetail: React.FC = () => {
         >
           <button 
             onClick={toggleFullScreenImage}
-            className="absolute top-4 right-4 text-white p-2 hover:bg-gray-800 rounded-full transition-colors"
+            className="absolute top-4 right-4 text-white p-2 hover:bg-gray-800 rounded-full transition-colors z-50"
             aria-label="Close full screen image"
           >
             <X className="h-8 w-8" />
@@ -515,10 +521,7 @@ export const ParkingSpotDetail: React.FC = () => {
             {spot.images.length > 1 && (
               <>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    prevImage();
-                  }}
+                  onClick={(e) => prevImage(e)}
                   className="absolute left-4 md:left-8 p-3 bg-black bg-opacity-50 hover:bg-opacity-70 rounded-full text-white transition-colors"
                   aria-label="Previous image"
                 >
@@ -526,10 +529,7 @@ export const ParkingSpotDetail: React.FC = () => {
                 </button>
                 
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    nextImage();
-                  }}
+                  onClick={(e) => nextImage(e)}
                   className="absolute right-4 md:right-8 p-3 bg-black bg-opacity-50 hover:bg-opacity-70 rounded-full text-white transition-colors"
                   aria-label="Next image"
                 >
