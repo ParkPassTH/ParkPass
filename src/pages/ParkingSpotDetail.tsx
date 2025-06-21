@@ -180,6 +180,9 @@ export const ParkingSpotDetail: React.FC = () => {
   const operatingHours = parseOperatingHours();
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+  // Get owner contact information
+  const ownerContact = spot.phone || "Contact Owner";
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 py-8">
@@ -292,7 +295,7 @@ export const ParkingSpotDetail: React.FC = () => {
                   <span className="font-medium">Availability</span>
                 </div>
                 <div className="font-semibold text-blue-900">
-                  {spot.available_slots} / {spot.total_slots} spots
+                  {spot.available_slots} / {spot.total_slots} {spot.total_slots === 1 ? 'spot' : 'spots'}
                 </div>
               </div>
               <div className="text-center">
@@ -310,7 +313,7 @@ export const ParkingSpotDetail: React.FC = () => {
                   <span className="font-medium">Contact</span>
                 </div>
                 <div className="font-semibold text-blue-900">
-                  {spot.phone || 'Not available'}
+                  {ownerContact}
                 </div>
               </div>
             </div>
@@ -480,7 +483,7 @@ export const ParkingSpotDetail: React.FC = () => {
                   className="flex items-center justify-center space-x-2 px-6 py-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors font-semibold"
                 >
                   <Phone className="h-5 w-5" />
-                  <span>Call</span>
+                  <span>Call Owner</span>
                 </a>
               )}
             </div>
@@ -490,7 +493,10 @@ export const ParkingSpotDetail: React.FC = () => {
 
       {/* Full Screen Image Modal */}
       {showFullScreenImage && (
-        <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center">
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center"
+          onClick={toggleFullScreenImage}
+        >
           <button 
             onClick={toggleFullScreenImage}
             className="absolute top-4 right-4 text-white p-2 hover:bg-gray-800 rounded-full transition-colors"
@@ -499,7 +505,7 @@ export const ParkingSpotDetail: React.FC = () => {
             <X className="h-8 w-8" />
           </button>
           
-          <div className="relative w-full h-full flex items-center justify-center p-4">
+          <div className="relative w-full h-full flex items-center justify-center p-4" onClick={(e) => e.stopPropagation()}>
             <img
               src={spot.images[currentImageIndex]}
               alt={spot.name}
