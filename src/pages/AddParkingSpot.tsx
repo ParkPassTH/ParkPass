@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { OpeningHours }  from '../components/OpeningHours';
 import { 
   ArrowLeft, MapPin, Clock, DollarSign, Camera, Plus, X,
-  Car, Zap, Shield, Umbrella, Wifi, Coffee, Wrench, Upload
+  Car, Zap, Shield, Umbrella, Wifi, Coffee, Wrench, Upload,
+  Navigation
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -16,6 +16,7 @@ export const AddParkingSpot: React.FC = () => {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gettingLocation, setGettingLocation] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -45,7 +46,7 @@ export const AddParkingSpot: React.FC = () => {
   });
 
   const [openingHours, setOpeningHours] = useState('');
-  const [coordinates, setCoordinates] = useState({ lat: 40.7128, lng: -74.0060 });
+  const [coordinates, setCoordinates] = useState({ lat: 13.7563, lng: 100.5018 }); // Default to Bangkok
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
 
@@ -84,6 +85,39 @@ export const AddParkingSpot: React.FC = () => {
         ...prev,
         address
       }));
+    }
+  };
+
+  const useCurrentLocation = () => {
+    setGettingLocation(true);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setCoordinates({ lat: latitude, lng: longitude });
+          // Attempt to get address via reverse geocoding
+          fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`)
+            .then(response => response.json())
+            .then(data => {
+              if (data.display_name) {
+                setFormData(prev => ({
+                  ...prev,
+                  address: data.display_name
+                }));
+              }
+            })
+            .catch(err => console.error('Error getting address:', err))
+            .finally(() => setGettingLocation(false));
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          setGettingLocation(false);
+          alert('Unable to get your location. Please enable location services and try again.');
+        }
+      );
+    } else {
+      setGettingLocation(false);
+      alert('Geolocation is not supported by this browser.');
     }
   };
 
@@ -132,6 +166,21 @@ export const AddParkingSpot: React.FC = () => {
       
       setImageFiles(prev => prev.filter((_, i) => i !== index));
       setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
+    }
+  };
+
+  const addImageUrl = () => {
+    const url = prompt('Enter image URL:');
+    if (url) {
+      // Limit to 4 images total
+      if (formData.images.length + imageFiles.length >= 4) {
+        alert('Maximum 4 images allowed');
+        return;
+      }
+      setFormData(prev => ({
+        ...prev,
+        images: [...prev.images, url]
+      }));
     }
   };
 
@@ -307,7 +356,27 @@ export const AddParkingSpot: React.FC = () => {
 
             {/* Location */}
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Location on Map</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">Location on Map</label>
+                <button
+                  type="button"
+                  onClick={useCurrentLocation}
+                  disabled={gettingLocation}
+                  className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+                >
+                  {gettingLocation ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <span>Getting location...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Navigation className="h-4 w-4" />
+                      <span>Use Current Location</span>
+                    </>
+                  )}
+                </button>
+              </div>
               <MapPicker
                 latitude={coordinates.lat}
                 longitude={coordinates.lng}
@@ -569,13 +638,3 @@ export const AddParkingSpot: React.FC = () => {
     </div>
   );
 };
-
-function addImageUrl() {
-  const url = prompt('Enter image URL:');
-  if (url) {
-    setFormData(prev => ({
-      ...prev,
-      images: [...prev.images, url]
-    }));
-  }
-}

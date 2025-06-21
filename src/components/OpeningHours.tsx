@@ -152,8 +152,8 @@ export const OpeningHours: React.FC<OpeningHoursProps> = ({ value, onChange }) =
   };
 
   const set24HoursAll = () => {
-    setIs24_7(true);
     initializeAllDays24Hours();
+    setIs24_7(true);
   };
 
   return (
