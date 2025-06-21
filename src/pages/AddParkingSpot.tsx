@@ -181,50 +181,10 @@ export const AddParkingSpot: React.FC = () => {
     }
   };
 
-  // Function to ensure the storage bucket exists and create it if needed
-  const ensureStorageBucket = async () => {
-    try {
-      // First, try to get the bucket to see if it exists
-      const { data: buckets, error: listError } = await supabase.storage.listBuckets();
-      
-      if (listError) {
-        console.error('Error listing buckets:', listError);
-        throw new Error('Error checking storage buckets: ' + listError.message);
-      }
-      
-      // Check if parking-spots bucket exists
-      const bucketExists = buckets?.some(bucket => bucket.name === 'parking-spots');
-      
-      if (!bucketExists) {
-        // Create the bucket if it doesn't exist
-        const { error: createError } = await supabase.storage.createBucket('parking-spots', {
-          public: true,
-          fileSizeLimit: 5242880, // 5MB
-          allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-        });
-        
-        if (createError) {
-          console.error('Error creating bucket:', createError);
-          throw new Error('Error creating storage bucket: ' + createError.message);
-        }
-        
-        console.log('Created parking-spots bucket successfully');
-      }
-      
-      return true;
-    } catch (error) {
-      console.error('Error ensuring storage bucket:', error);
-      throw new Error('Failed to prepare storage bucket: ' + (error as any).message);
-    }
-  };
-
   const uploadImages = async (): Promise<string[]> => {
     if (imageFiles.length === 0) return [];
     
     try {
-      // Ensure the bucket exists
-      await ensureStorageBucket();
-      
       const uploadedUrls: string[] = [];
       
       for (const file of imageFiles) {
