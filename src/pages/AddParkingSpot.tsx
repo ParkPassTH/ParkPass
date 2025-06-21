@@ -518,7 +518,6 @@ export const AddParkingSpot: React.FC = () => {
                 )}
                 
                 {/* Add URL Button - only show if less than 4 images */}
-
               </div>
               
               <div className="text-sm text-gray-600 flex items-center space-x-2">
