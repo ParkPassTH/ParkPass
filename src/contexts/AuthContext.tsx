@@ -59,76 +59,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadProfile = async (userId: string) => {
     try {
-      console.log('Loading profile for user:', userId);
-      
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Profile loading timeout')), 5000);
-      });
-
-      const profilePromise = Promise.resolve(supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .maybeSingle());
-
-      const { data: profile, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
-
-      console.log('Profile query result:', { profile, error });
-
-      if (error) {
-        console.error('Error loading profile:', error);
-        
-        // Handle invalid session or JWT errors
-        if (
-          error.code === 'PGRST301' || // JWT expired/invalid
-          (error.message && error.message.toLowerCase().includes('jwt'))
-        ) {
-          console.log('JWT error detected, signing out');
-          await supabase.auth.signOut();
-          setUser(null);
-          setProfile(null);
-          setLoading(false);
-          return;
-        }
-        
-        // For other errors or no profile found, create a basic profile
-        console.log('Profile not found or error occurred, creating basic profile');
-        await createBasicProfile(userId);
-        return;
-      } else if (!profile) {
-        console.log('No profile found, creating basic profile');
-        await createBasicProfile(userId);
-        return;
-      } else {
-        console.log('Profile loaded successfully:', profile);
-        setProfile(profile);
-      }
-    } catch (error: any) {
-      console.error('Error loading profile:', error);
-      
-      // Handle timeout or other errors
-      if (error.message === 'Profile loading timeout') {
-        console.log('Profile loading timed out, creating basic profile');
-        await createBasicProfile(userId);
+        .single();
+  
+      if (error || !data) {
+        console.warn('Profile not found or error:', error?.message);
+        setProfile(null); // fallback
         return;
       }
-      
-      // Handle fetch/network errors
-      if (error.message && error.message.toLowerCase().includes('jwt')) {
-        console.log('JWT error in catch, signing out');
-        await supabase.auth.signOut();
-        setUser(null);
-        setProfile(null);
-        setLoading(false);
-        return;
-      }
-      
-      // Try to create a basic profile for other errors
-      console.log('Error loading profile, attempting to create basic profile');
-      await createBasicProfile(userId);
+  
+      setProfile(data);
+    } catch (err) {
+      console.error('Unexpected error loading profile:', err);
+      setProfile(null);
     } finally {
-      setLoading(false);
+      setLoading(false); // <-- สำคัญมาก!
     }
   };
 
