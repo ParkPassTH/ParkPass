@@ -53,6 +53,11 @@ export const MapPicker: React.FC<MapPickerProps> = ({
     const initMap = async () => {
       if (!mapRef.current) return;
       
+      // Check if map is already initialized
+      if (mapInstanceRef.current) {
+        return;
+      }
+      
       const leaflet = await loadLeaflet();
       if (!leaflet) {
         console.error('Leaflet failed to load');
@@ -94,6 +99,7 @@ export const MapPicker: React.FC<MapPickerProps> = ({
     return () => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
       }
     };
   }, []);

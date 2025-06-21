@@ -181,14 +181,55 @@ export const AddParkingSpot: React.FC = () => {
     }
   };
 
+  const ensureStorageBucket = async () => {
+    try {
+      // Check if bucket exists
+      const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+      
+      if (listError) {
+        console.error('Error listing buckets:', listError);
+        return false;
+      }
+      
+      const bucketExists = buckets?.some(bucket => bucket.name === 'parking-spots');
+      
+      if (!bucketExists) {
+        // Create the bucket
+        const { error: createError } = await supabase.storage.createBucket('parking-spots', {
+          public: true,
+          allowedMimeTypes: ['image/*'],
+          fileSizeLimit: 5242880 // 5MB
+        });
+        
+        if (createError) {
+          console.error('Error creating bucket:', createError);
+          return false;
+        }
+        
+        console.log('Created parking-spots bucket');
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error ensuring storage bucket:', error);
+      return false;
+    }
+  };
+
   const uploadImages = async (): Promise<string[]> => {
     if (imageFiles.length === 0) return [];
+    
+    // Ensure the storage bucket exists
+    const bucketReady = await ensureStorageBucket();
+    if (!bucketReady) {
+      throw new Error('Failed to prepare storage bucket');
+    }
     
     const uploadedUrls: string[] = [];
     
     for (const file of imageFiles) {
       const fileName = `${Date.now()}-${file.name}`;
-      const filePath = `parking-spots/${fileName}`;
+      const filePath = `${fileName}`;
       
       try {
         const { error } = await supabase.storage
