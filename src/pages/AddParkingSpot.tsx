@@ -8,12 +8,14 @@ import {
   Car, Zap, Shield, Umbrella, Wifi, Coffee, Wrench
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { supabaseService } from '../services/supabaseService';
 import { MapPicker } from '../components/MapPicker';
 
 export const AddParkingSpot: React.FC = () => {
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -22,7 +24,6 @@ export const AddParkingSpot: React.FC = () => {
     totalSlots: 1,
     priceType: 'hour' as 'hour' | 'day' | 'month',
     price: 0,
-    phone: '',
     amenities: [] as string[],
     images: [] as string[],
     operatingHours: {
@@ -45,7 +46,6 @@ export const AddParkingSpot: React.FC = () => {
 
   const [openingHours, setOpeningHours] = useState('');
   const [coordinates, setCoordinates] = useState({ lat: 40.7128, lng: -74.0060 });
-  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
 
   const availableAmenities = [
     { id: 'ev-charging', name: 'EV Charging', icon: Zap },
@@ -72,37 +72,6 @@ export const AddParkingSpot: React.FC = () => {
       amenities: prev.amenities.includes(amenity.name)
         ? prev.amenities.filter(a => a !== amenity.name)
         : [...prev.amenities, amenity.name]
-    }));
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const files = Array.from(e.target.files);
-      const imageUrls = files.map(file => URL.createObjectURL(file));
-      setUploadedImages(imageUrls);
-    }
-  };
-
-  const handleOperatingHoursChange = (day: string, field: string, value: string | boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      operatingHours: {
-        ...prev.operatingHours,
-        [day]: {
-          ...prev.operatingHours[day as keyof typeof prev.operatingHours],
-          [field]: value
-        }
-      }
-    }));
-  };
-
-  const handleFeatureToggle = (feature: string) => {
-    setFormData(prev => ({
-      ...prev,
-      features: {
-        ...prev.features,
-        [feature]: !prev.features[feature as keyof typeof prev.features]
-      }
     }));
   };
 
@@ -135,39 +104,42 @@ export const AddParkingSpot: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    setError(null);
 
     if (!profile) {
-      alert('You must be logged in to add a parking spot.');
+      setError('You must be logged in to add a parking spot.');
+      setLoading(false);
       return;
     }
 
-    const newSpot = {
-      owner_id: profile.id,
-      name: formData.name,
-      description: formData.description,
-      address: formData.address,
-      latitude: coordinates.lat,
-      longitude: coordinates.lng,
-      total_slots: formData.totalSlots,
-      available_slots: formData.totalSlots,
-      price_type: formData.priceType,
-      price: formData.price,
-      amenities: formData.amenities,
-      images: formData.images,
-      operating_hours: formData.operatingHours,
-      is_active: true,
-      // Optionally, add features if you store them in DB
-    };
-
     try {
-      const { error } = await supabase
-        .from('parking_spots')
-        .insert([newSpot]);
-      if (error) throw error;
+      // Prepare the spot data according to the database schema
+      const spotData = {
+        name: formData.name,
+        description: formData.description || null,
+        address: formData.address,
+        latitude: coordinates.lat,
+        longitude: coordinates.lng,
+        total_slots: formData.totalSlots,
+        available_slots: formData.totalSlots, // Initially all slots are available
+        price: formData.price,
+        price_type: formData.priceType,
+        amenities: formData.amenities,
+        images: formData.images,
+        operating_hours: openingHours || JSON.stringify(formData.operatingHours),
+        is_active: true,
+      };
+
+      await supabaseService.createParkingSpot(spotData);
+      
+      // Navigate back to admin dashboard on success
       navigate('/admin');
     } catch (error: any) {
-      console.error("Error adding parking spot:", error.message);
-      alert("Failed to add parking spot: " + error.message);
+      console.error("Error adding parking spot:", error);
+      setError(error.message || "Failed to add parking spot. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -192,6 +164,12 @@ export const AddParkingSpot: React.FC = () => {
             </p>
           </div>
 
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-red-700">{error}</p>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-8">
             {/* Basic Information */}
             <div className="bg-gray-50 rounded-lg p-6">
@@ -213,15 +191,16 @@ export const AddParkingSpot: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Phone Number
+                    Address *
                   </label>
                   <input
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
+                    type="text"
+                    name="address"
+                    value={formData.address}
                     onChange={handleInputChange}
-                    placeholder="+1 (555) 123-4567"
+                    placeholder="Full address of the parking spot"
                     className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    required
                   />
                 </div>
               </div>
@@ -340,64 +319,37 @@ export const AddParkingSpot: React.FC = () => {
             {/* Images */}
             <div className="space-y-2">
               <Label htmlFor="images">Photos</Label>
-              <Input
-                id="images"
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={handleImageUpload}
-              />
-              {uploadedImages.length > 0 && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
-                  {uploadedImages.map((image, index) => (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                {formData.images.map((image, index) => (
+                  <div key={index} className="relative">
                     <img
-                      key={index}
                       src={image}
-                      alt={`Preview ${index + 1}`}
-                      className="h-24 w-full object-cover rounded-md border"
+                      alt={`Parking spot ${index + 1}`}
+                      className="w-full h-32 object-cover rounded-lg"
                     />
-                  ))}
-                </div>
-              )}
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addImageUrl}
+                  className="h-32 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center hover:border-gray-400 transition-colors"
+                >
+                  <div className="text-center">
+                    <Plus className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                    <span className="text-sm text-gray-600">Add Image</span>
+                  </div>
+                </button>
+              </div>
               <p className="text-sm text-gray-600">
                 Upload clear photos of your parking spot to attract more bookings
               </p>
-            </div>
-
-            {/* Features */}
-            <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Features & Settings</h3>
-              <div className="space-y-4">
-                {Object.entries(formData.features).map(([key, value]) => (
-                  <div key={key} className="flex items-center justify-between py-2">
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {key === 'allowExtensions' && 'Allow Time Extensions'}
-                        {key === 'requireQREntry' && 'Require QR Code Entry'}
-                        {key === 'plateRestriction' && 'License Plate Restriction'}
-                        {key === 'valetService' && 'Valet Service Available'}
-                        {key === 'carWash' && 'Car Wash Service'}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {key === 'allowExtensions' && 'Users can extend their parking time'}
-                        {key === 'requireQREntry' && 'Entry requires QR code or PIN validation'}
-                        {key === 'plateRestriction' && 'Restrict access to registered license plates only'}
-                        {key === 'valetService' && 'Professional valet parking service'}
-                        {key === 'carWash' && 'On-site car washing services'}
-                      </p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={value}
-                        onChange={() => handleFeatureToggle(key)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                  </div>
-                ))}
-              </div>
             </div>
 
             {/* Submit Buttons */}
@@ -405,15 +357,24 @@ export const AddParkingSpot: React.FC = () => {
               <button
                 type="button"
                 onClick={() => navigate('/admin')}
-                className="flex-1 border border-gray-200 py-3 px-6 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                disabled={loading}
+                className="flex-1 border border-gray-200 py-3 px-6 rounded-lg font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                disabled={loading}
+                className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Create Parking Spot
+                {loading ? (
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Creating...</span>
+                  </div>
+                ) : (
+                  'Create Parking Spot'
+                )}
               </button>
             </div>
           </form>

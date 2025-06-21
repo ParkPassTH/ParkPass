@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   BarChart3, 
@@ -30,29 +30,77 @@ import {
   CalendarDays
 } from 'lucide-react';
 import { QRScanner } from '../components/QRScanner';
+import { supabaseService } from '../services/supabaseService';
+import { useAuth } from '../contexts/AuthContext';
 
 export const AdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'home' | 'dashboard' | 'spots' | 'bookings' | 'reviews' | 'reports' | 'settings'>('home');
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
+  const [parkingSpots, setParkingSpots] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { profile } = useAuth();
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [spotsData, bookingsData] = await Promise.all([
+        supabaseService.getMyParkingSpots(),
+        supabaseService.getMyBookings()
+      ]);
+      setParkingSpots(spotsData);
+      setBookings(bookingsData);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const stats = [
-    { label: 'Today\'s Revenue', value: '$1,240', change: '+15%', icon: DollarSign, color: 'text-green-600' },
-    { label: 'Active Bookings', value: '24', change: '+8%', icon: Calendar, color: 'text-blue-600' },
-    { label: 'Total Spots', value: '8', change: '0%', icon: MapPin, color: 'text-purple-600' },
-    { label: 'Avg Rating', value: '4.6', change: '+0.2', icon: Star, color: 'text-yellow-600' },
+    { 
+      label: 'Today\'s Revenue', 
+      value: `$${bookings.filter(b => new Date(b.created_at).toDateString() === new Date().toDateString()).reduce((sum, b) => sum + b.total_cost, 0)}`, 
+      change: '+15%', 
+      icon: DollarSign, 
+      color: 'text-green-600' 
+    },
+    { 
+      label: 'Active Bookings', 
+      value: bookings.filter(b => b.status === 'active' || b.status === 'confirmed').length.toString(), 
+      change: '+8%', 
+      icon: Calendar, 
+      color: 'text-blue-600' 
+    },
+    { 
+      label: 'Total Spots', 
+      value: parkingSpots.length.toString(), 
+      change: '0%', 
+      icon: MapPin, 
+      color: 'text-purple-600' 
+    },
+    { 
+      label: 'Avg Rating', 
+      value: '4.6', 
+      change: '+0.2', 
+      icon: Star, 
+      color: 'text-yellow-600' 
+    },
   ];
 
-  const todayBookings = [
-    { id: 'B001', customer: 'John Doe', spot: 'Central Plaza A1', time: '09:00-17:00', status: 'active', vehicle: 'ABC-123' },
-    { id: 'B002', customer: 'Sarah Johnson', spot: 'Central Plaza B2', time: '14:00-18:00', status: 'pending', vehicle: 'XYZ-789' },
-    { id: 'B003', customer: 'Mike Wilson', spot: 'Airport Express C3', time: '08:00-20:00', status: 'completed', vehicle: 'DEF-456' },
-  ];
+  const todayBookings = bookings.filter(booking => 
+    new Date(booking.created_at).toDateString() === new Date().toDateString()
+  ).slice(0, 3);
 
   const handleQRScan = (data: string) => {
     setScanResult(data);
     setShowQRScanner(false);
-    // Process the scanned data here
     console.log('Scanned data:', data);
   };
 
@@ -97,28 +145,34 @@ export const AdminDashboard: React.FC = () => {
         </div>
         
         <div className="space-y-3">
-          {todayBookings.map((booking) => (
-            <div key={booking.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div className="flex-1">
-                <div className="flex items-center space-x-3">
-                  <span className="font-medium text-gray-900">{booking.customer}</span>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    booking.status === 'active' ? 'bg-green-100 text-green-800' :
-                    booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {booking.status}
-                  </span>
+          {todayBookings.length > 0 ? (
+            todayBookings.map((booking) => (
+              <div key={booking.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-3">
+                    <span className="font-medium text-gray-900">Booking #{booking.id.slice(-6)}</span>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      booking.status === 'active' ? 'bg-green-100 text-green-800' :
+                      booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {booking.status}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-600 mt-1">
+                    ${booking.total_cost} • {new Date(booking.start_time).toLocaleTimeString()} - {new Date(booking.end_time).toLocaleTimeString()}
+                  </div>
                 </div>
-                <div className="text-sm text-gray-600 mt-1">
-                  {booking.spot} • {booking.time} • {booking.vehicle}
-                </div>
+                <button className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
+                  <MoreHorizontal className="h-4 w-4 text-gray-500" />
+                </button>
               </div>
-              <button className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
-                <MoreHorizontal className="h-4 w-4 text-gray-500" />
-              </button>
+            ))
+          ) : (
+            <div className="text-center py-4 text-gray-500">
+              No bookings today
             </div>
-          ))}
+          )}
         </div>
       </div>
 
@@ -200,22 +254,21 @@ export const AdminDashboard: React.FC = () => {
       <div className="bg-white rounded-xl shadow-md p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
         <div className="space-y-4">
-          {[
-            { time: '2 hours ago', event: 'New booking at Central Plaza Parking', type: 'booking' },
-            { time: '4 hours ago', event: 'Payment received: $150', type: 'payment' },
-            { time: '6 hours ago', event: 'New 5-star review received', type: 'review' },
-            { time: '1 day ago', event: 'Customer extended parking time', type: 'extension' },
-          ].map((activity, index) => (
-            <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+          {bookings.slice(0, 4).map((booking, index) => (
+            <div key={booking.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
               <div className={`w-2 h-2 rounded-full ${
-                activity.type === 'booking' ? 'bg-blue-600' :
-                activity.type === 'payment' ? 'bg-green-600' :
-                activity.type === 'review' ? 'bg-yellow-600' :
-                'bg-purple-600'
+                booking.status === 'confirmed' ? 'bg-blue-600' :
+                booking.status === 'completed' ? 'bg-green-600' :
+                booking.status === 'cancelled' ? 'bg-red-600' :
+                'bg-yellow-600'
               }`}></div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">{activity.event}</p>
-                <p className="text-xs text-gray-500">{activity.time}</p>
+                <p className="text-sm font-medium text-gray-900">
+                  Booking #{booking.id.slice(-6)} - {booking.status}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {new Date(booking.created_at).toLocaleString()}
+                </p>
               </div>
             </div>
           ))}
@@ -239,55 +292,65 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         <div className="space-y-4">
-          {[
-            { id: '1', name: 'Central Plaza Parking', address: '123 Main Street', slots: '12/50', status: 'Active', revenue: '$2,400', enabled: true },
-            { id: '2', name: 'Airport Express Parking', address: '789 Airport Way', slots: '156/800', status: 'Active', revenue: '$8,200', enabled: true },
-            { id: '3', name: 'Downtown Office Complex', address: '456 Business Ave', slots: '0/25', status: 'Disabled', revenue: '$0', enabled: false },
-          ].map((spot, index) => (
-            <div key={index} className="border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-3 mb-2">
-                    <h4 className="font-semibold text-gray-900">{spot.name}</h4>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      spot.status === 'Active' 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {spot.status}
-                    </span>
+          {parkingSpots.length > 0 ? (
+            parkingSpots.map((spot) => (
+              <div key={spot.id} className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <h4 className="font-semibold text-gray-900">{spot.name}</h4>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        spot.is_active 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {spot.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-1">{spot.address}</p>
+                    <div className="flex items-center space-x-4 text-sm text-gray-600">
+                      <span>{spot.available_slots}/{spot.total_slots} available</span>
+                      <span>•</span>
+                      <span>${spot.price}/{spot.price_type}</span>
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-600 mb-1">{spot.address}</p>
-                  <div className="flex items-center space-x-4 text-sm text-gray-600">
-                    <span>{spot.slots} available</span>
-                    <span>•</span>
-                    <span>{spot.revenue} this month</span>
+                  <div className="flex items-center space-x-2">
+                    <button className="p-2 text-gray-600 hover:text-blue-600 transition-colors">
+                      <Eye className="h-4 w-4" />
+                    </button>
+                    <Link
+                      to={`/admin/edit-spot/${spot.id}`}
+                      className="p-2 text-gray-600 hover:text-blue-600 transition-colors"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Link>
+                    <Link
+                      to={`/admin/availability/${spot.id}`}
+                      className="p-2 text-gray-600 hover:text-purple-600 transition-colors"
+                      title="Manage Availability"
+                    >
+                      <CalendarDays className="h-4 w-4" />
+                    </Link>
+                    <button className="p-2 text-gray-600 hover:text-blue-600 transition-colors">
+                      {spot.is_active ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
+                    </button>
                   </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button className="p-2 text-gray-600 hover:text-blue-600 transition-colors">
-                    <Eye className="h-4 w-4" />
-                  </button>
-                  <Link
-                    to={`/admin/edit-spot/${spot.id}`}
-                    className="p-2 text-gray-600 hover:text-blue-600 transition-colors"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Link>
-                  <Link
-                    to={`/admin/availability/${spot.id}`}
-                    className="p-2 text-gray-600 hover:text-purple-600 transition-colors"
-                    title="Manage Availability"
-                  >
-                    <CalendarDays className="h-4 w-4" />
-                  </Link>
-                  <button className="p-2 text-gray-600 hover:text-blue-600 transition-colors">
-                    {spot.enabled ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
-                  </button>
                 </div>
               </div>
+            ))
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <MapPin className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+              <p>No parking spots found</p>
+              <Link
+                to="/admin/add-spot"
+                className="inline-flex items-center space-x-2 mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add Your First Spot</span>
+              </Link>
             </div>
-          ))}
+          )}
         </div>
       </div>
     </div>
@@ -319,9 +382,6 @@ export const AdminDashboard: React.FC = () => {
             <thead>
               <tr className="border-b border-gray-200">
                 <th className="text-left py-3 px-4 font-semibold text-gray-900">Booking ID</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-900">Customer</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-900">Spot</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-900">Vehicle</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-900">Date & Time</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-900">Status</th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-900">Amount</th>
@@ -329,37 +389,32 @@ export const AdminDashboard: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {[
-                { id: 'BK001', customer: 'John Doe', spot: 'Central Plaza A1', vehicle: 'ABC-123', date: 'Jan 15, 2024', time: '09:00-17:00', status: 'Active', amount: '$200' },
-                { id: 'BK002', customer: 'Sarah Johnson', spot: 'Airport Express B2', vehicle: 'XYZ-789', date: 'Jan 14, 2024', time: '14:00-18:00', status: 'Completed', amount: '$300' },
-                { id: 'BK003', customer: 'Mike Wilson', spot: 'Central Plaza C3', vehicle: 'DEF-456', date: 'Jan 13, 2024', time: '10:00-16:00', status: 'Pending', amount: '$150' },
-              ].map((booking, index) => (
-                <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-3 px-4 font-mono text-sm">{booking.id}</td>
-                  <td className="py-3 px-4 text-gray-900">{booking.customer}</td>
-                  <td className="py-3 px-4 text-gray-600">{booking.spot}</td>
-                  <td className="py-3 px-4 font-mono text-sm">{booking.vehicle}</td>
+              {bookings.map((booking) => (
+                <tr key={booking.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-3 px-4 font-mono text-sm">#{booking.id.slice(-6)}</td>
                   <td className="py-3 px-4 text-gray-600">
-                    <div>{booking.date}</div>
-                    <div className="text-xs text-gray-500">{booking.time}</div>
+                    <div>{new Date(booking.start_time).toLocaleDateString()}</div>
+                    <div className="text-xs text-gray-500">
+                      {new Date(booking.start_time).toLocaleTimeString()} - {new Date(booking.end_time).toLocaleTimeString()}
+                    </div>
                   </td>
                   <td className="py-3 px-4">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      booking.status === 'Active' ? 'bg-green-100 text-green-800' :
-                      booking.status === 'Completed' ? 'bg-blue-100 text-blue-800' :
-                      booking.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                      booking.status === 'active' ? 'bg-green-100 text-green-800' :
+                      booking.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                      booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                       'bg-red-100 text-red-800'
                     }`}>
                       {booking.status}
                     </span>
                   </td>
-                  <td className="py-3 px-4 font-semibold text-gray-900">{booking.amount}</td>
+                  <td className="py-3 px-4 font-semibold text-gray-900">${booking.total_cost}</td>
                   <td className="py-3 px-4">
                     <div className="flex items-center space-x-1">
                       <button className="p-1 hover:bg-gray-200 rounded transition-colors">
                         <Eye className="h-4 w-4 text-gray-500" />
                       </button>
-                      {booking.status === 'Active' && (
+                      {booking.status === 'active' && (
                         <button className="p-1 hover:bg-red-100 rounded transition-colors">
                           <AlertTriangle className="h-4 w-4 text-red-500" />
                         </button>
@@ -388,56 +443,15 @@ export const AdminDashboard: React.FC = () => {
                   <Star key={i} className={`h-4 w-4 ${i < 4 ? 'text-yellow-400 fill-current' : 'text-gray-300'}`} />
                 ))}
               </div>
-              <div className="text-sm text-gray-500">128 reviews</div>
+              <div className="text-sm text-gray-500">Average rating</div>
             </div>
           </div>
         </div>
         
-        <div className="space-y-4">
-          {[
-            { customer: 'John D.', rating: 5, comment: 'Excellent parking facility with great security!', spot: 'Central Plaza', date: '2 days ago', replied: false },
-            { customer: 'Sarah M.', rating: 4, comment: 'Good location and clean facilities. The EV charging was convenient.', spot: 'Central Plaza', date: '1 week ago', replied: true },
-            { customer: 'Mike R.', rating: 5, comment: 'Perfect for airport trips. Shuttle service was excellent.', spot: 'Airport Express', date: '2 weeks ago', replied: false },
-          ].map((review, index) => (
-            <div key={index} className="border border-gray-200 rounded-lg p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <div className="flex items-center space-x-2 mb-1">
-                    <span className="font-semibold text-gray-900">{review.customer}</span>
-                    <div className="flex items-center">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`h-4 w-4 ${
-                            i < review.rating
-                              ? 'text-yellow-400 fill-current'
-                              : 'text-gray-300'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  <p className="text-sm text-gray-600 mb-1">{review.spot} • {review.date}</p>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {review.replied && (
-                    <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
-                      Replied
-                    </span>
-                  )}
-                  <button className="p-1 hover:bg-gray-100 rounded transition-colors">
-                    <MoreHorizontal className="h-4 w-4 text-gray-500" />
-                  </button>
-                </div>
-              </div>
-              <p className="text-gray-700 mb-3">{review.comment}</p>
-              {!review.replied && (
-                <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
-                  Reply to review
-                </button>
-              )}
-            </div>
-          ))}
+        <div className="text-center py-8 text-gray-500">
+          <Star className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+          <p>No reviews yet</p>
+          <p className="text-sm">Reviews will appear here once customers start rating your parking spots</p>
         </div>
       </div>
     </div>
@@ -460,70 +474,26 @@ export const AdminDashboard: React.FC = () => {
               <DollarSign className="h-5 w-5 text-green-600" />
               <span className="font-medium text-green-900">Revenue</span>
             </div>
-            <div className="text-2xl font-bold text-green-900">$12,450</div>
-            <div className="text-sm text-green-700">This month</div>
+            <div className="text-2xl font-bold text-green-900">
+              ${bookings.reduce((sum, b) => sum + b.total_cost, 0)}
+            </div>
+            <div className="text-sm text-green-700">Total earned</div>
           </div>
           <div className="bg-blue-50 rounded-lg p-4">
             <div className="flex items-center space-x-2 mb-2">
               <Calendar className="h-5 w-5 text-blue-600" />
               <span className="font-medium text-blue-900">Bookings</span>
             </div>
-            <div className="text-2xl font-bold text-blue-900">342</div>
-            <div className="text-sm text-blue-700">This month</div>
+            <div className="text-2xl font-bold text-blue-900">{bookings.length}</div>
+            <div className="text-sm text-blue-700">Total bookings</div>
           </div>
           <div className="bg-purple-50 rounded-lg p-4">
             <div className="flex items-center space-x-2 mb-2">
-              <Users className="h-5 w-5 text-purple-600" />
-              <span className="font-medium text-purple-900">Customers</span>
+              <MapPin className="h-5 w-5 text-purple-600" />
+              <span className="font-medium text-purple-900">Spots</span>
             </div>
-            <div className="text-2xl font-bold text-purple-900">156</div>
-            <div className="text-sm text-purple-700">Unique visitors</div>
-          </div>
-        </div>
-
-        <div className="grid lg:grid-cols-2 gap-6">
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-3">Revenue by Period</h4>
-            <div className="space-y-2">
-              {[
-                { period: 'Today', amount: '$240', percentage: 85 },
-                { period: 'This Week', amount: '$1,680', percentage: 92 },
-                { period: 'This Month', amount: '$12,450', percentage: 78 },
-                { period: 'This Year', amount: '$89,320', percentage: 65 },
-              ].map((item, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="font-medium text-gray-900">{item.period}</span>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-24 bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full" 
-                        style={{ width: `${item.percentage}%` }}
-                      ></div>
-                    </div>
-                    <span className="font-semibold text-gray-900 w-16 text-right">{item.amount}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-3">Top Performing Spots</h4>
-            <div className="space-y-2">
-              {[
-                { name: 'Central Plaza', bookings: 89, revenue: '$4,200' },
-                { name: 'Airport Express', bookings: 156, revenue: '$8,200' },
-                { name: 'Mall Parking', bookings: 45, revenue: '$2,100' },
-              ].map((spot, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <div className="font-medium text-gray-900">{spot.name}</div>
-                    <div className="text-sm text-gray-600">{spot.bookings} bookings</div>
-                  </div>
-                  <div className="font-semibold text-gray-900">{spot.revenue}</div>
-                </div>
-              ))}
-            </div>
+            <div className="text-2xl font-bold text-purple-900">{parkingSpots.length}</div>
+            <div className="text-sm text-purple-700">Active spots</div>
           </div>
         </div>
       </div>
@@ -541,24 +511,19 @@ export const AdminDashboard: React.FC = () => {
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                <input type="text" defaultValue="John Smith" className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                <input 
+                  type="text" 
+                  defaultValue={profile?.name || ''} 
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input type="email" defaultValue="john@example.com" className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="font-medium text-gray-900 mb-3">Payment Settings</h4>
-            <div className="p-4 border border-gray-200 rounded-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-gray-900">Bank Account</p>
-                  <p className="text-sm text-gray-600">**** **** **** 1234</p>
-                </div>
-                <button className="text-blue-600 hover:text-blue-800 font-medium">Update</button>
+                <input 
+                  type="email" 
+                  defaultValue={profile?.email || ''} 
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
+                />
               </div>
             </div>
           </div>
@@ -591,6 +556,28 @@ export const AdminDashboard: React.FC = () => {
   );
 
   const renderContent = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-700">{error}</p>
+          <button 
+            onClick={loadData}
+            className="mt-2 text-red-600 hover:text-red-800 font-medium"
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
+
     switch (activeTab) {
       case 'home': return <HomeSection />;
       case 'dashboard': return <DashboardSection />;
