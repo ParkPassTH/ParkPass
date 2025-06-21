@@ -519,14 +519,6 @@ export const AddParkingSpot: React.FC = () => {
                 
                 {/* Add URL Button - only show if less than 4 images */}
                 {formData.images.length + imageFiles.length < 4 && (
-                  <button
-                    type="button"
-                    onClick={addImageUrl}
-                    className="h-32 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center hover:border-gray-400 transition-colors"
-                  >
-                    <Plus className="h-8 w-8 text-gray-400 mb-2" />
-                    <span className="text-sm text-gray-600">Add Image URL</span>
-                  </button>
                 )}
               </div>
               
