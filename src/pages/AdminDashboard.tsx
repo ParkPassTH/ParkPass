@@ -37,6 +37,7 @@ import {
 import { QRScanner } from '../components/QRScanner';
 import { supabaseService } from '../services/supabaseService';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 export const AdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'home' | 'dashboard' | 'spots' | 'bookings' | 'reviews' | 'reports' | 'settings'>('home');
@@ -44,21 +45,10 @@ export const AdminDashboard: React.FC = () => {
   const [scanResult, setScanResult] = useState<string | null>(null);
   const [parkingSpots, setParkingSpots] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { profile, updateProfile } = useAuth();
-
-  // Settings form state
-  const [settingsForm, setSettingsForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    business_name: '',
-    business_address: ''
-  });
-  const [settingsLoading, setSettingsLoading] = useState(false);
-  const [settingsError, setSettingsError] = useState<string | null>(null);
-  const [settingsSuccess, setSettingsSuccess] = useState(false);
+  const { profile } = useAuth();
 
   // Payment methods state
   const [paymentMethods, setPaymentMethods] = useState({
@@ -75,22 +65,13 @@ export const AdminDashboard: React.FC = () => {
     }
   });
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [qrImageFile, setQrImageFile] = useState<File | null>(null);
+  const [qrImagePreview, setQrImagePreview] = useState<string>('');
 
   useEffect(() => {
     loadData();
+    loadPaymentMethods();
   }, []);
-
-  useEffect(() => {
-    if (profile) {
-      setSettingsForm({
-        name: profile.name || '',
-        email: profile.email || '',
-        phone: profile.phone || '',
-        business_name: profile.business_name || '',
-        business_address: profile.business_address || ''
-      });
-    }
-  }, [profile]);
 
   const loadData = async () => {
     try {
@@ -101,6 +82,16 @@ export const AdminDashboard: React.FC = () => {
       ]);
       setParkingSpots(spotsData);
       setBookings(bookingsData);
+      
+      // Load reviews for all owner's spots
+      if (spotsData.length > 0) {
+        const allReviews = [];
+        for (const spot of spotsData) {
+          const spotReviews = await supabaseService.getReviewsForSpot(spot.id);
+          allReviews.push(...spotReviews);
+        }
+        setReviews(allReviews);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load data');
     } finally {
@@ -108,20 +99,83 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleSettingsSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSettingsLoading(true);
-    setSettingsError(null);
-    setSettingsSuccess(false);
-
+  const loadPaymentMethods = async () => {
     try {
-      await updateProfile(settingsForm);
-      setSettingsSuccess(true);
-      setTimeout(() => setSettingsSuccess(false), 3000);
-    } catch (err: any) {
-      setSettingsError(err.message || 'Failed to update profile');
-    } finally {
-      setSettingsLoading(false);
+      // Load existing payment methods from database
+      const { data, error } = await supabase
+        .from('payment_methods')
+        .select('*')
+        .eq('owner_id', profile?.id)
+        .eq('is_active', true);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const qrMethod = data.find(pm => pm.type === 'qr_code');
+        const bankMethod = data.find(pm => pm.type === 'bank_transfer');
+
+        setPaymentMethods({
+          qr_code: {
+            enabled: !!qrMethod,
+            qr_code_url: qrMethod?.qr_code_url || '',
+            account_name: qrMethod?.account_name || ''
+          },
+          bank_account: {
+            enabled: !!bankMethod,
+            bank_name: bankMethod?.bank_name || '',
+            account_number: bankMethod?.account_number || '',
+            account_name: bankMethod?.account_name || ''
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Error loading payment methods:', err);
+    }
+  };
+
+  const handleQrImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('File size must be less than 5MB');
+        return;
+      }
+
+      setQrImageFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setQrImagePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const uploadQrImage = async (file: File): Promise<string> => {
+    try {
+      const fileName = `qr-${profile?.id}-${Date.now()}.${file.name.split('.').pop()}`;
+      const filePath = `payment-qr-codes/${fileName}`;
+
+      const { data, error } = await supabase.storage
+        .from('payment-qr-codes')
+        .upload(filePath, file);
+
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('payment-qr-codes')
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Error uploading QR image:', error);
+      throw new Error('Failed to upload QR code image');
     }
   };
 
@@ -135,14 +189,73 @@ export const AdminDashboard: React.FC = () => {
     }));
   };
 
-  const handlePaymentMethodSave = async (method: 'qr_code' | 'bank_account') => {
+  const handlePaymentMethodSave = async (method: 'qr_code' | 'bank_transfer') => {
+    if (!profile?.id) {
+      alert('User profile not found');
+      return;
+    }
+
     setPaymentLoading(true);
     try {
-      // Here you would save to your payment_methods table
-      // For now, just simulate success
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      let qrCodeUrl = paymentMethods.qr_code.qr_code_url;
+      
+      // Upload new QR image if provided
+      if (method === 'qr_code' && qrImageFile) {
+        qrCodeUrl = await uploadQrImage(qrImageFile);
+      }
+
+      // Prepare payment method data
+      const paymentMethodData = {
+        owner_id: profile.id,
+        type: method,
+        qr_code_url: method === 'qr_code' ? qrCodeUrl : null,
+        account_name: method === 'qr_code' ? paymentMethods.qr_code.account_name : paymentMethods.bank_account.account_name,
+        bank_name: method === 'bank_transfer' ? paymentMethods.bank_account.bank_name : null,
+        account_number: method === 'bank_transfer' ? paymentMethods.bank_account.account_number : null,
+        is_active: paymentMethods[method === 'qr_code' ? 'qr_code' : 'bank_account'].enabled
+      };
+
+      // Check if payment method already exists
+      const { data: existingMethod } = await supabase
+        .from('payment_methods')
+        .select('id')
+        .eq('owner_id', profile.id)
+        .eq('type', method)
+        .single();
+
+      if (existingMethod) {
+        // Update existing payment method
+        const { error } = await supabase
+          .from('payment_methods')
+          .update(paymentMethodData)
+          .eq('id', existingMethod.id);
+
+        if (error) throw error;
+      } else {
+        // Create new payment method
+        const { error } = await supabase
+          .from('payment_methods')
+          .insert(paymentMethodData);
+
+        if (error) throw error;
+      }
+      
+      // Update local state
+      if (method === 'qr_code') {
+        setPaymentMethods(prev => ({
+          ...prev,
+          qr_code: {
+            ...prev.qr_code,
+            qr_code_url: qrCodeUrl
+          }
+        }));
+      }
+      
       alert(`${method === 'qr_code' ? 'QR Code' : 'Bank Account'} payment method saved successfully!`);
+      setQrImageFile(null);
+      setQrImagePreview('');
     } catch (err: any) {
+      console.error('Error saving payment method:', err);
       alert(`Failed to save payment method: ${err.message}`);
     } finally {
       setPaymentLoading(false);
@@ -154,6 +267,13 @@ export const AdminDashboard: React.FC = () => {
       navigator.clipboard.writeText(paymentMethods.qr_code.qr_code_url);
       alert('QR Code URL copied to clipboard!');
     }
+  };
+
+  // Calculate real average rating from reviews
+  const calculateAverageRating = () => {
+    if (reviews.length === 0) return '0.0';
+    const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+    return (totalRating / reviews.length).toFixed(1);
   };
 
   const stats = [
@@ -180,7 +300,7 @@ export const AdminDashboard: React.FC = () => {
     },
     { 
       label: 'Avg Rating', 
-      value: '4.6', 
+      value: calculateAverageRating(), 
       change: '+0.2', 
       icon: Star, 
       color: 'text-yellow-600' 
@@ -530,22 +650,73 @@ export const AdminDashboard: React.FC = () => {
           <h3 className="text-lg font-semibold text-gray-900">Reviews & Feedback</h3>
           <div className="flex items-center space-x-4">
             <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">4.6</div>
+              <div className="text-2xl font-bold text-gray-900">{calculateAverageRating()}</div>
               <div className="flex items-center space-x-1">
                 {[...Array(5)].map((_, i) => (
-                  <Star key={i} className={`h-4 w-4 ${i < 4 ? 'text-yellow-400 fill-current' : 'text-gray-300'}`} />
+                  <Star key={i} className={`h-4 w-4 ${i < Math.floor(parseFloat(calculateAverageRating())) ? 'text-yellow-400 fill-current' : 'text-gray-300'}`} />
                 ))}
               </div>
-              <div className="text-sm text-gray-500">Average rating</div>
+              <div className="text-sm text-gray-500">{reviews.length} review{reviews.length !== 1 ? 's' : ''}</div>
             </div>
           </div>
         </div>
         
-        <div className="text-center py-8 text-gray-500">
-          <Star className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-          <p>No reviews yet</p>
-          <p className="text-sm">Reviews will appear here once customers start rating your parking spots</p>
-        </div>
+        {reviews.length > 0 ? (
+          <div className="space-y-4">
+            {reviews.map((review) => (
+              <div key={review.id} className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <div className="flex items-center space-x-2 mb-1">
+                      <span className="font-semibold text-gray-900">
+                        {review.is_anonymous ? 'Anonymous Customer' : 'Customer Review'}
+                      </span>
+                      <div className="flex items-center">
+                        {[...Array(5)].map((_, i) => (
+                          <Star
+                            key={i}
+                            className={`h-4 w-4 ${
+                              i < review.rating
+                                ? 'text-yellow-400 fill-current'
+                                : 'text-gray-300'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-sm font-medium text-gray-700">
+                        {review.rating}/5
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-1">
+                      {new Date(review.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+                {review.comment && (
+                  <p className="text-gray-700 mb-3">{review.comment}</p>
+                )}
+                {review.photos && review.photos.length > 0 && (
+                  <div className="flex space-x-2 mb-3">
+                    {review.photos.map((photo, index) => (
+                      <img
+                        key={index}
+                        src={photo}
+                        alt={`Review photo ${index + 1}`}
+                        className="w-16 h-16 object-cover rounded-lg"
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            <Star className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+            <p>No reviews yet</p>
+            <p className="text-sm">Reviews will appear here once customers start rating your parking spots</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -595,94 +766,47 @@ export const AdminDashboard: React.FC = () => {
 
   const SettingsSection = () => (
     <div className="space-y-6">
-      {/* Owner Information */}
+      {/* Owner Information - Read Only */}
       <div className="bg-white rounded-xl shadow-md p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-900">Owner Information</h3>
-          {settingsSuccess && (
-            <div className="flex items-center space-x-2 text-green-600">
-              <CheckCircle className="h-5 w-5" />
-              <span className="text-sm font-medium">Profile updated successfully!</span>
-            </div>
-          )}
+          <div className="text-sm text-gray-500">
+            Edit in <Link to="/profile" className="text-blue-600 hover:text-blue-800 font-medium">Profile Page</Link>
+          </div>
         </div>
         
-        {settingsError && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-700 text-sm">{settingsError}</p>
-          </div>
-        )}
-
-        <form onSubmit={handleSettingsSubmit} className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-              <input 
-                type="text" 
-                value={settingsForm.name}
-                onChange={(e) => setSettingsForm(prev => ({ ...prev, name: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input 
-                type="email" 
-                value={settingsForm.email}
-                onChange={(e) => setSettingsForm(prev => ({ ...prev, email: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-              <input 
-                type="tel" 
-                value={settingsForm.phone}
-                onChange={(e) => setSettingsForm(prev => ({ ...prev, phone: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
-              <input 
-                type="text" 
-                value={settingsForm.business_name}
-                onChange={(e) => setSettingsForm(prev => ({ ...prev, business_name: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
-              />
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+            <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700">
+              {profile?.name || 'Not set'}
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Business Address</label>
-            <input 
-              type="text" 
-              value={settingsForm.business_address}
-              onChange={(e) => setSettingsForm(prev => ({ ...prev, business_address: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
-            />
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700">
+              {profile?.email || 'Not set'}
+            </div>
           </div>
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={settingsLoading}
-              className="flex items-center space-x-2 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-            >
-              {settingsLoading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4" />
-                  <span>Save Changes</span>
-                </>
-              )}
-            </button>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+            <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700">
+              {profile?.phone || 'Not set'}
+            </div>
           </div>
-        </form>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
+            <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700">
+              {profile?.business_name || 'Not set'}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Business Address</label>
+          <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700">
+            {profile?.business_address || 'Not set'}
+          </div>
+        </div>
       </div>
 
       {/* Payment Methods */}
@@ -733,25 +857,46 @@ export const AdminDashboard: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">QR Code Image URL</label>
-                  <div className="flex space-x-2">
-                    <input 
-                      type="url" 
-                      value={paymentMethods.qr_code.qr_code_url}
-                      onChange={(e) => setPaymentMethods(prev => ({
-                        ...prev,
-                        qr_code: { ...prev.qr_code, qr_code_url: e.target.value }
-                      }))}
-                      placeholder="https://example.com/qr-code.png"
-                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
-                    />
-                    <button
-                      type="button"
-                      onClick={copyQRCode}
-                      className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      <Copy className="h-4 w-4" />
-                    </button>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">QR Code Image</label>
+                  <div className="space-y-3">
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleQrImageUpload}
+                        className="hidden"
+                        id="qr-upload"
+                      />
+                      <label
+                        htmlFor="qr-upload"
+                        className="flex items-center space-x-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                      >
+                        <Upload className="h-4 w-4" />
+                        <span>Upload QR Code</span>
+                      </label>
+                      {(qrImagePreview || paymentMethods.qr_code.qr_code_url) && (
+                        <button
+                          type="button"
+                          onClick={copyQRCode}
+                          className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                    {(qrImagePreview || paymentMethods.qr_code.qr_code_url) && (
+                      <div className="flex items-center space-x-3">
+                        <img
+                          src={qrImagePreview || paymentMethods.qr_code.qr_code_url}
+                          alt="QR Code Preview"
+                          className="w-24 h-24 object-cover rounded-lg border border-gray-200"
+                        />
+                        <div className="text-sm text-gray-600">
+                          <p>QR Code {qrImagePreview ? 'ready to upload' : 'uploaded successfully'}</p>
+                          <p className="text-xs">Customers will see this QR code for payments</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex justify-end">
@@ -760,8 +905,17 @@ export const AdminDashboard: React.FC = () => {
                     disabled={paymentLoading}
                     className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                   >
-                    <Save className="h-4 w-4" />
-                    <span>Save QR Payment</span>
+                    {paymentLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4" />
+                        <span>Save QR Payment</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

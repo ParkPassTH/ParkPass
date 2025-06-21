@@ -1,5 +1,5 @@
-
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { MapPin, Navigation } from 'lucide-react';
 
 // Dynamic import for leaflet to avoid SSR issues
 let L: any = null;
@@ -34,7 +34,7 @@ const loadLeaflet = async () => {
 interface MapPickerProps {
   latitude?: number;
   longitude?: number;
-  onLocationChange: (lat: number, lng: number) => void;
+  onLocationChange: (lat: number, lng: number, address?: string) => void;
   height?: string;
 }
 
@@ -47,6 +47,7 @@ export const MapPicker: React.FC<MapPickerProps> = ({
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
+  const [gettingLocation, setGettingLocation] = useState(false);
 
   useEffect(() => {
     const initMap = async () => {
@@ -72,18 +73,18 @@ export const MapPicker: React.FC<MapPickerProps> = ({
       }).addTo(mapInstanceRef.current);
 
       // Handle marker drag
-      markerRef.current.on('dragend', (e: any) => {
+      markerRef.current.on('dragend', async (e: any) => {
         const marker = e.target;
         const position = marker.getLatLng();
-        onLocationChange(position.lat, position.lng);
+        await reverseGeocode(position.lat, position.lng);
       });
 
       // Handle map click
-      mapInstanceRef.current.on('click', (e: any) => {
+      mapInstanceRef.current.on('click', async (e: any) => {
         const { lat, lng } = e.latlng;
         if (markerRef.current) {
           markerRef.current.setLatLng([lat, lng]);
-          onLocationChange(lat, lng);
+          await reverseGeocode(lat, lng);
         }
       });
     };
@@ -104,16 +105,106 @@ export const MapPicker: React.FC<MapPickerProps> = ({
     }
   }, [latitude, longitude]);
 
+  const reverseGeocode = async (lat: number, lng: number) => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
+      );
+      const data = await response.json();
+      const address = data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      onLocationChange(lat, lng, address);
+    } catch (error) {
+      console.warn('Reverse geocoding failed:', error);
+      onLocationChange(lat, lng);
+    }
+  };
+
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by this browser');
+      return;
+    }
+
+    setGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude: lat, longitude: lng } = position.coords;
+        
+        // Update map view and marker
+        if (mapInstanceRef.current && markerRef.current) {
+          mapInstanceRef.current.setView([lat, lng], 15);
+          markerRef.current.setLatLng([lat, lng]);
+        }
+        
+        // Get address and notify parent
+        await reverseGeocode(lat, lng);
+        setGettingLocation(false);
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        let errorMessage = 'Unable to get your location. ';
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage += 'Please enable location permissions and try again.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage += 'Location information is unavailable.';
+            break;
+          case error.TIMEOUT:
+            errorMessage += 'Location request timed out.';
+            break;
+          default:
+            errorMessage += 'An unknown error occurred.';
+            break;
+        }
+        
+        alert(errorMessage);
+        setGettingLocation(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000
+      }
+    );
+  };
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-gray-600">
+          Click on the map or drag the marker to set location
+        </div>
+        <button
+          onClick={useCurrentLocation}
+          disabled={gettingLocation}
+          className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+        >
+          {gettingLocation ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              <span>Getting location...</span>
+            </>
+          ) : (
+            <>
+              <Navigation className="h-4 w-4" />
+              <span>Use Current Location</span>
+            </>
+          )}
+        </button>
+      </div>
+      
       <div 
         ref={mapRef} 
-        style={{ height }} 
+        style={{height}} 
         className="w-full rounded-lg border border-gray-200"
       />
-      <p className="text-sm text-gray-600">
-        Click on the map or drag the marker to set your parking spot location
-      </p>
+      
+      <div className="text-sm text-gray-600 flex items-center space-x-2">
+        <MapPin className="h-4 w-4 text-gray-500" />
+        <span>Current coordinates: {latitude.toFixed(6)}, {longitude.toFixed(6)}</span>
+      </div>
     </div>
   );
 };
