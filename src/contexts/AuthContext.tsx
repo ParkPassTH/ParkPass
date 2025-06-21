@@ -23,18 +23,6 @@ export const useAuth = () => {
   return context;
 };
 
-/* async function deleteAllUsers() {
-  const { data, error } = await supabase.auth.admin.listUsers();
-  if (error) throw error;
-
-  for (const user of data.users) {
-    await supabase.auth.admin.deleteUser(user.id);
-  }
-}
-
-deleteAllUsers();
- */
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -47,7 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (session?.user) {
         loadProfile(session.user.id);
       } else {
-        setProfile(null); // <-- add this
+        setProfile(null);
         setLoading(false);
       }
     });
@@ -78,6 +66,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .maybeSingle();
 
       if (error) {
+        console.error('Error loading profile:', error);
         setProfile(null);
         // Handle invalid session or JWT errors
         if (
@@ -90,7 +79,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setLoading(false);
           return;
         }
-        console.error('Error loading profile:', error);
       } else {
         setProfile(profile);
         if (!profile) {
@@ -98,6 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     } catch (error: any) {
+      console.error('Error loading profile:', error);
       setProfile(null);
       // Handle fetch/network errors
       if (error.message && error.message.toLowerCase().includes('jwt')) {
@@ -107,8 +96,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(false);
         return;
       }
-      console.error('Error loading profile:', error);
     } finally {
+      // Always set loading to false when profile loading is complete
       setLoading(false);
     }
   };
@@ -137,10 +126,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (error: any) {
       console.error('❌ Sign in error:', error.message);
+      setLoading(false); // Set loading to false on error
       throw error;
-    } finally {
-      /* setLoading(false); */
     }
+    // Note: Don't set loading to false here as loadProfile will handle it
   };
 
   const signUp = async (email: string, password: string, userData: any) => {
@@ -177,10 +166,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setProfile(null);
-    setLoading(false);
+    setLoading(true);
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setProfile(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const updateProfile = async (updates: Partial<Profile>) => {
