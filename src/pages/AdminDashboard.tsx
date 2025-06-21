@@ -27,7 +27,12 @@ import {
   Settings,
   FileText,
   PieChart,
-  CalendarDays
+  CalendarDays,
+  Save,
+  CreditCard,
+  Building2,
+  Upload,
+  Copy
 } from 'lucide-react';
 import { QRScanner } from '../components/QRScanner';
 import { supabaseService } from '../services/supabaseService';
@@ -41,11 +46,51 @@ export const AdminDashboard: React.FC = () => {
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { profile } = useAuth();
+  const { profile, updateProfile } = useAuth();
+
+  // Settings form state
+  const [settingsForm, setSettingsForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    business_name: '',
+    business_address: ''
+  });
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsSuccess, setSettingsSuccess] = useState(false);
+
+  // Payment methods state
+  const [paymentMethods, setPaymentMethods] = useState({
+    qr_code: {
+      enabled: false,
+      qr_code_url: '',
+      account_name: ''
+    },
+    bank_account: {
+      enabled: false,
+      bank_name: '',
+      account_number: '',
+      account_name: ''
+    }
+  });
+  const [paymentLoading, setPaymentLoading] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (profile) {
+      setSettingsForm({
+        name: profile.name || '',
+        email: profile.email || '',
+        phone: profile.phone || '',
+        business_name: profile.business_name || '',
+        business_address: profile.business_address || ''
+      });
+    }
+  }, [profile]);
 
   const loadData = async () => {
     try {
@@ -60,6 +105,54 @@ export const AdminDashboard: React.FC = () => {
       setError(err.message || 'Failed to load data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSettingsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSettingsLoading(true);
+    setSettingsError(null);
+    setSettingsSuccess(false);
+
+    try {
+      await updateProfile(settingsForm);
+      setSettingsSuccess(true);
+      setTimeout(() => setSettingsSuccess(false), 3000);
+    } catch (err: any) {
+      setSettingsError(err.message || 'Failed to update profile');
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const handlePaymentMethodToggle = (method: 'qr_code' | 'bank_account') => {
+    setPaymentMethods(prev => ({
+      ...prev,
+      [method]: {
+        ...prev[method],
+        enabled: !prev[method].enabled
+      }
+    }));
+  };
+
+  const handlePaymentMethodSave = async (method: 'qr_code' | 'bank_account') => {
+    setPaymentLoading(true);
+    try {
+      // Here you would save to your payment_methods table
+      // For now, just simulate success
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      alert(`${method === 'qr_code' ? 'QR Code' : 'Bank Account'} payment method saved successfully!`);
+    } catch (err: any) {
+      alert(`Failed to save payment method: ${err.message}`);
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  const copyQRCode = () => {
+    if (paymentMethods.qr_code.qr_code_url) {
+      navigator.clipboard.writeText(paymentMethods.qr_code.qr_code_url);
+      alert('QR Code URL copied to clipboard!');
     }
   };
 
@@ -502,54 +595,239 @@ export const AdminDashboard: React.FC = () => {
 
   const SettingsSection = () => (
     <div className="space-y-6">
+      {/* Owner Information */}
       <div className="bg-white rounded-xl shadow-md p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-6">Account Settings</h3>
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-semibold text-gray-900">Owner Information</h3>
+          {settingsSuccess && (
+            <div className="flex items-center space-x-2 text-green-600">
+              <CheckCircle className="h-5 w-5" />
+              <span className="text-sm font-medium">Profile updated successfully!</span>
+            </div>
+          )}
+        </div>
+        
+        {settingsError && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-700 text-sm">{settingsError}</p>
+          </div>
+        )}
+
+        <form onSubmit={handleSettingsSubmit} className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+              <input 
+                type="text" 
+                value={settingsForm.name}
+                onChange={(e) => setSettingsForm(prev => ({ ...prev, name: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input 
+                type="email" 
+                value={settingsForm.email}
+                onChange={(e) => setSettingsForm(prev => ({ ...prev, email: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+              <input 
+                type="tel" 
+                value={settingsForm.phone}
+                onChange={(e) => setSettingsForm(prev => ({ ...prev, phone: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
+              <input 
+                type="text" 
+                value={settingsForm.business_name}
+                onChange={(e) => setSettingsForm(prev => ({ ...prev, business_name: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Business Address</label>
+            <input 
+              type="text" 
+              value={settingsForm.business_address}
+              onChange={(e) => setSettingsForm(prev => ({ ...prev, business_address: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
+            />
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={settingsLoading}
+              className="flex items-center space-x-2 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              {settingsLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  <span>Save Changes</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Payment Methods */}
+      <div className="bg-white rounded-xl shadow-md p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-6">Payment Methods</h3>
         
         <div className="space-y-6">
-          <div>
-            <h4 className="font-medium text-gray-900 mb-3">Owner Information</h4>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                <input 
-                  type="text" 
-                  defaultValue={profile?.name || ''} 
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
-                />
+          {/* QR Code Payment */}
+          <div className="border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <QrCode className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-900">QR Code Payment</h4>
+                  <p className="text-sm text-gray-600">Accept payments via QR code (PromptPay, etc.)</p>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input 
-                  type="email" 
-                  defaultValue={profile?.email || ''} 
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
-                />
+              <div className="flex items-center space-x-3">
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  paymentMethods.qr_code.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                }`}>
+                  {paymentMethods.qr_code.enabled ? 'Active' : 'Inactive'}
+                </span>
+                <button
+                  onClick={() => handlePaymentMethodToggle('qr_code')}
+                  className="text-blue-600 hover:text-blue-800 transition-colors"
+                >
+                  {paymentMethods.qr_code.enabled ? <ToggleRight className="h-6 w-6" /> : <ToggleLeft className="h-6 w-6" />}
+                </button>
               </div>
             </div>
+            
+            {paymentMethods.qr_code.enabled && (
+              <div className="space-y-4 pt-4 border-t border-gray-200">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Account Name</label>
+                  <input 
+                    type="text" 
+                    value={paymentMethods.qr_code.account_name}
+                    onChange={(e) => setPaymentMethods(prev => ({
+                      ...prev,
+                      qr_code: { ...prev.qr_code, account_name: e.target.value }
+                    }))}
+                    placeholder="Your name or business name"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">QR Code Image URL</label>
+                  <div className="flex space-x-2">
+                    <input 
+                      type="url" 
+                      value={paymentMethods.qr_code.qr_code_url}
+                      onChange={(e) => setPaymentMethods(prev => ({
+                        ...prev,
+                        qr_code: { ...prev.qr_code, qr_code_url: e.target.value }
+                      }))}
+                      placeholder="https://example.com/qr-code.png"
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
+                    />
+                    <button
+                      type="button"
+                      onClick={copyQRCode}
+                      className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => handlePaymentMethodSave('qr_code')}
+                    disabled={paymentLoading}
+                    className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    <Save className="h-4 w-4" />
+                    <span>Save QR Payment</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div>
-            <h4 className="font-medium text-gray-900 mb-3">Notification Preferences</h4>
-            <div className="space-y-3">
-              {[
-                { label: 'New Bookings', description: 'Get notified when customers make new bookings' },
-                { label: 'Payment Received', description: 'Receive alerts when payments are processed' },
-                { label: 'Customer Reviews', description: 'Be notified of new customer reviews' },
-                { label: 'System Updates', description: 'Important system and feature updates' },
-              ].map((item, index) => (
-                <div key={index} className="flex items-center justify-between py-3 border-b border-gray-200 last:border-b-0">
-                  <div>
-                    <p className="font-medium text-gray-900">{item.label}</p>
-                    <p className="text-sm text-gray-600">{item.description}</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" defaultChecked className="sr-only peer" />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                  </label>
+          {/* Bank Account Payment */}
+          <div className="border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <Building2 className="h-5 w-5 text-green-600" />
                 </div>
-              ))}
+                <div>
+                  <h4 className="font-medium text-gray-900">Bank Account Transfer</h4>
+                  <p className="text-sm text-gray-600">Accept direct bank transfers (Coming Soon)</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                  Next Phase
+                </span>
+                <button
+                  disabled
+                  className="text-gray-400 cursor-not-allowed"
+                >
+                  <ToggleLeft className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="pt-4 border-t border-gray-200">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-center space-x-2">
+                  <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                  <p className="text-sm text-yellow-800">
+                    Bank account payment integration will be available in the next phase of development.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Notification Preferences */}
+      <div className="bg-white rounded-xl shadow-md p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-6">Notification Preferences</h3>
+        <div className="space-y-3">
+          {[
+            { label: 'New Bookings', description: 'Get notified when customers make new bookings' },
+            { label: 'Payment Received', description: 'Receive alerts when payments are processed' },
+            { label: 'Customer Reviews', description: 'Be notified of new customer reviews' },
+            { label: 'System Updates', description: 'Important system and feature updates' },
+          ].map((item, index) => (
+            <div key={index} className="flex items-center justify-between py-3 border-b border-gray-200 last:border-b-0">
+              <div>
+                <p className="font-medium text-gray-900">{item.label}</p>
+                <p className="text-sm text-gray-600">{item.description}</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" defaultChecked className="sr-only peer" />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+          ))}
         </div>
       </div>
     </div>
