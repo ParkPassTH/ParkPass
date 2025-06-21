@@ -17,12 +17,12 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ParkingSpot } from '../lib/supabase';
+import { ParkingSpotCarousel } from '../components/ParkingSpotCarousel';
 
 export const ParkingSpotDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [isFavorited, setIsFavorited] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(0);
   const [spot, setSpot] = useState<ParkingSpot | null>(null);
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,19 +73,16 @@ export const ParkingSpotDetail: React.FC = () => {
     fetchSpotDetails();
   }, [id]);
 
-  const nextImage = () => {
-    if (!spot?.images || spot.images.length <= 1) return;
-    setSelectedImage((prev) => (prev + 1) % spot.images.length);
-  };
-
-  const prevImage = () => {
-    if (!spot?.images || spot.images.length <= 1) return;
-    setSelectedImage((prev) => (prev === 0 ? spot.images.length - 1 : prev - 1));
-  };
-
   const handleBookNow = () => {
     if (spot) {
       navigate(`/book/${spot.id}`);
+    }
+  };
+
+  const handleNavigate = () => {
+    if (spot && spot.latitude && spot.longitude) {
+      // Open in Google Maps
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${spot.latitude},${spot.longitude}`, '_blank');
     }
   };
 
@@ -138,29 +135,7 @@ export const ParkingSpotDetail: React.FC = () => {
           {/* Image Gallery */}
           <div className="relative">
             {spot.images && spot.images.length > 0 ? (
-              <>
-                <img
-                  src={spot.images[selectedImage]}
-                  alt={spot.name}
-                  className="w-full h-64 md:h-80 object-cover"
-                />
-                {spot.images.length > 1 && (
-                  <>
-                    <button 
-                      onClick={prevImage}
-                      className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-80 p-2 rounded-full shadow-md hover:bg-opacity-100 transition-all"
-                    >
-                      <ChevronLeft className="h-5 w-5 text-gray-700" />
-                    </button>
-                    <button 
-                      onClick={nextImage}
-                      className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-80 p-2 rounded-full shadow-md hover:bg-opacity-100 transition-all"
-                    >
-                      <ChevronRight className="h-5 w-5 text-gray-700" />
-                    </button>
-                  </>
-                )}
-              </>
+              <ParkingSpotCarousel images={spot.images} alt={spot.name} />
             ) : (
               <div className="w-full h-64 md:h-80 bg-gray-200 flex items-center justify-center">
                 <Car className="h-16 w-16 text-gray-400" />
@@ -169,19 +144,6 @@ export const ParkingSpotDetail: React.FC = () => {
             <div className="absolute top-4 right-4 bg-white px-3 py-2 rounded-full font-semibold text-lg">
               {formatPrice(spot.price, spot.price_type)}
             </div>
-            {spot.images && spot.images.length > 1 && (
-              <div className="absolute bottom-4 left-0 right-0 flex justify-center space-x-2">
-                {spot.images.map((_, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setSelectedImage(index)}
-                    className={`w-3 h-3 rounded-full transition-colors ${
-                      selectedImage === index ? 'bg-white' : 'bg-white bg-opacity-50'
-                    }`}
-                  />
-                ))}
-              </div>
-            )}
           </div>
 
           <div className="p-6">
@@ -220,7 +182,7 @@ export const ParkingSpotDetail: React.FC = () => {
               <div className="text-center">
                 <div className="flex items-center justify-center space-x-1 text-sm text-gray-600 mb-1">
                   <Clock className="h-4 w-4" />
-                  <span>Hours</span>
+                  <span>Opening & Closing Times</span>
                 </div>
                 <div className="font-semibold">
                   {typeof spot.operating_hours === 'string' 
@@ -337,7 +299,10 @@ export const ParkingSpotDetail: React.FC = () => {
               >
                 {spot.available_slots > 0 ? 'Book Now' : 'No Spots Available'}
               </button>
-              <button className="flex items-center justify-center space-x-2 px-6 py-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors font-semibold">
+              <button 
+                onClick={handleNavigate}
+                className="flex items-center justify-center space-x-2 px-6 py-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors font-semibold"
+              >
                 <Navigation className="h-5 w-5" />
                 <span>Navigate</span>
               </button>
