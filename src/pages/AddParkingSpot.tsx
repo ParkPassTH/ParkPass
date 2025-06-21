@@ -5,10 +5,10 @@ import { Label } from '../components/ui/label';
 import { OpeningHours }  from '../components/OpeningHours';
 import { 
   ArrowLeft, MapPin, Clock, DollarSign, Camera, Plus, X,
-  Car, Zap, Shield, Umbrella, Wifi, Coffee, Wrench
+  Car, Zap, Shield, Umbrella, Wifi, Coffee, Wrench, Upload
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabaseService } from '../services/supabaseService';
+import { supabase } from '../lib/supabase';
 import { MapPicker } from '../components/MapPicker';
 
 export const AddParkingSpot: React.FC = () => {
@@ -46,6 +46,8 @@ export const AddParkingSpot: React.FC = () => {
 
   const [openingHours, setOpeningHours] = useState('');
   const [coordinates, setCoordinates] = useState({ lat: 40.7128, lng: -74.0060 });
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
 
   const availableAmenities = [
     { id: 'ev-charging', name: 'EV Charging', icon: Zap },
@@ -85,27 +87,102 @@ export const AddParkingSpot: React.FC = () => {
     }
   };
 
-  const addImageUrl = () => {
-    const url = prompt('Enter image URL:');
-    if (url) {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    
+    // Limit to 4 images total
+    const remainingSlots = 4 - imageFiles.length - formData.images.length;
+    if (remainingSlots <= 0) {
+      alert('Maximum 4 images allowed');
+      return;
+    }
+    
+    const newFiles = Array.from(files).slice(0, remainingSlots);
+    
+    // Validate file types and sizes
+    const validFiles = newFiles.filter(file => {
+      if (!file.type.startsWith('image/')) {
+        alert(`File ${file.name} is not an image`);
+        return false;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        alert(`File ${file.name} exceeds 5MB limit`);
+        return false;
+      }
+      return true;
+    });
+    
+    // Create preview URLs
+    const newPreviewUrls = validFiles.map(file => URL.createObjectURL(file));
+    
+    setImageFiles(prev => [...prev, ...validFiles]);
+    setImagePreviewUrls(prev => [...prev, ...newPreviewUrls]);
+  };
+
+  const removeImage = (index: number, type: 'url' | 'file') => {
+    if (type === 'url') {
       setFormData(prev => ({
         ...prev,
-        images: [...prev.images, url]
+        images: prev.images.filter((_, i) => i !== index)
       }));
+    } else {
+      // Revoke object URL to avoid memory leaks
+      URL.revokeObjectURL(imagePreviewUrls[index]);
+      
+      setImageFiles(prev => prev.filter((_, i) => i !== index));
+      setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
     }
   };
 
-  const removeImage = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      images: prev.images.filter((_, i) => i !== index)
-    }));
+  const uploadImages = async (): Promise<string[]> => {
+    if (imageFiles.length === 0) return [];
+    
+    const uploadedUrls: string[] = [];
+    
+    for (const file of imageFiles) {
+      const fileName = `${Date.now()}-${file.name}`;
+      const filePath = `parking-spots/${fileName}`;
+      
+      try {
+        const { error } = await supabase.storage
+          .from('parking-spots')
+          .upload(filePath, file);
+          
+        if (error) throw error;
+        
+        const { data } = supabase.storage
+          .from('parking-spots')
+          .getPublicUrl(filePath);
+          
+        uploadedUrls.push(data.publicUrl);
+      } catch (error) {
+        console.error('Error uploading image:', error);
+        throw new Error('Failed to upload images');
+      }
+    }
+    
+    return uploadedUrls;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    // Validate required fields
+    if (!formData.name || !formData.address || formData.price <= 0) {
+      setError('Please fill in all required fields');
+      setLoading(false);
+      return;
+    }
+
+    // Validate images (at least 1 required)
+    if (formData.images.length === 0 && imageFiles.length === 0) {
+      setError('Please add at least one image of your parking spot');
+      setLoading(false);
+      return;
+    }
 
     if (!profile) {
       setError('You must be logged in to add a parking spot.');
@@ -114,8 +191,13 @@ export const AddParkingSpot: React.FC = () => {
     }
 
     try {
+      // Upload new images
+      const uploadedImageUrls = await uploadImages();
+      const allImages = [...formData.images, ...uploadedImageUrls];
+
       // Prepare the spot data according to the database schema
       const spotData = {
+        owner_id: profile.id,
         name: formData.name,
         description: formData.description || null,
         address: formData.address,
@@ -126,12 +208,16 @@ export const AddParkingSpot: React.FC = () => {
         price: formData.price,
         price_type: formData.priceType,
         amenities: formData.amenities,
-        images: formData.images,
+        images: allImages,
         operating_hours: openingHours || JSON.stringify(formData.operatingHours),
         is_active: true,
       };
 
-      await supabaseService.createParkingSpot(spotData);
+      const { error } = await supabase
+        .from('parking_spots')
+        .insert([spotData]);
+
+      if (error) throw error;
       
       // Navigate back to admin dashboard on success
       navigate('/admin');
@@ -227,9 +313,6 @@ export const AddParkingSpot: React.FC = () => {
                 longitude={coordinates.lng}
                 onLocationChange={handleLocationChange}
               />
-              <div className="text-sm text-gray-600">
-                Current coordinates: {coordinates.lat.toFixed(6)}, {coordinates.lng.toFixed(6)}
-              </div>
             </div>
 
             {/* Pricing & Capacity */}
@@ -317,11 +400,21 @@ export const AddParkingSpot: React.FC = () => {
             </div>
 
             {/* Images */}
-            <div className="space-y-2">
-              <Label htmlFor="images">Photos</Label>
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+            <div className="bg-gray-50 rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <Camera className="h-5 w-5 mr-2" />
+                  Photos (Required)
+                </h3>
+                <span className="text-sm text-gray-600">
+                  {formData.images.length + imageFiles.length}/4 images
+                </span>
+              </div>
+              
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                {/* URL Images */}
                 {formData.images.map((image, index) => (
-                  <div key={index} className="relative">
+                  <div key={`url-${index}`} className="relative">
                     <img
                       src={image}
                       alt={`Parking spot ${index + 1}`}
@@ -329,27 +422,120 @@ export const AddParkingSpot: React.FC = () => {
                     />
                     <button
                       type="button"
-                      onClick={() => removeImage(index)}
+                      onClick={() => removeImage(index, 'url')}
                       className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
                     >
                       <X className="h-4 w-4" />
                     </button>
                   </div>
                 ))}
-                <button
-                  type="button"
-                  onClick={addImageUrl}
-                  className="h-32 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center hover:border-gray-400 transition-colors"
-                >
-                  <div className="text-center">
-                    <Plus className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                    <span className="text-sm text-gray-600">Add Image</span>
+                
+                {/* File Upload Previews */}
+                {imagePreviewUrls.map((previewUrl, index) => (
+                  <div key={`file-${index}`} className="relative">
+                    <img
+                      src={previewUrl}
+                      alt={`Parking spot upload ${index + 1}`}
+                      className="w-full h-32 object-cover rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index, 'file')}
+                      className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
-                </button>
+                ))}
+                
+                {/* Add Image Button - only show if less than 4 images */}
+                {formData.images.length + imageFiles.length < 4 && (
+                  <div className="relative">
+                    <input
+                      type="file"
+                      id="image-upload"
+                      accept="image/*"
+                      multiple
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="image-upload"
+                      className="h-32 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center hover:border-gray-400 transition-colors cursor-pointer"
+                    >
+                      <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                      <span className="text-sm text-gray-600">Upload Image</span>
+                    </label>
+                  </div>
+                )}
+                
+                {/* Add URL Button - only show if less than 4 images */}
+                {formData.images.length + imageFiles.length < 4 && (
+                  <button
+                    type="button"
+                    onClick={addImageUrl}
+                    className="h-32 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center hover:border-gray-400 transition-colors"
+                  >
+                    <Plus className="h-8 w-8 text-gray-400 mb-2" />
+                    <span className="text-sm text-gray-600">Add Image URL</span>
+                  </button>
+                )}
               </div>
-              <p className="text-sm text-gray-600">
-                Upload clear photos of your parking spot to attract more bookings
-              </p>
+              
+              <div className="text-sm text-gray-600 flex items-center space-x-2">
+                <Camera className="h-4 w-4 text-gray-500" />
+                <span>Upload clear photos of your parking spot (min 1, max 4 images)</span>
+              </div>
+              
+              {formData.images.length + imageFiles.length === 0 && (
+                <div className="mt-2 text-sm text-red-600">
+                  At least one image is required
+                </div>
+              )}
+            </div>
+
+            {/* Features */}
+            <div className="bg-gray-50 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Features & Settings</h3>
+              <div className="space-y-4">
+                {Object.entries(formData.features).map(([key, value]) => (
+                  <div key={key} className="flex items-center justify-between py-2">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {key === 'allowExtensions' && 'Allow Time Extensions'}
+                        {key === 'requireQREntry' && 'Require QR Code Entry'}
+                        {key === 'plateRestriction' && 'License Plate Restriction'}
+                        {key === 'valetService' && 'Valet Service Available'}
+                        {key === 'carWash' && 'Car Wash Service'}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {key === 'allowExtensions' && 'Users can extend their parking time'}
+                        {key === 'requireQREntry' && 'Entry requires QR code or PIN validation'}
+                        {key === 'plateRestriction' && 'Restrict access to registered license plates only'}
+                        {key === 'valetService' && 'Professional valet parking service'}
+                        {key === 'carWash' && 'On-site car washing services'}
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={value}
+                        onChange={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            features: {
+                              ...prev.features,
+                              [key]: !value
+                            }
+                          }));
+                        }}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Submit Buttons */}
@@ -364,7 +550,7 @@ export const AddParkingSpot: React.FC = () => {
               </button>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || formData.images.length + imageFiles.length === 0}
                 className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
@@ -383,3 +569,13 @@ export const AddParkingSpot: React.FC = () => {
     </div>
   );
 };
+
+function addImageUrl() {
+  const url = prompt('Enter image URL:');
+  if (url) {
+    setFormData(prev => ({
+      ...prev,
+      images: [...prev.images, url]
+    }));
+  }
+}

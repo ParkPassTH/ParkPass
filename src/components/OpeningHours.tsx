@@ -34,16 +34,23 @@ const TIME_OPTIONS = [
 
 export const OpeningHours: React.FC<OpeningHoursProps> = ({ value, onChange }) => {
   const [hours, setHours] = useState<Record<string, DayHours>>({});
+  const [is24_7, setIs24_7] = useState(false);
 
   // Initialize hours from value prop
   useEffect(() => {
     if (value) {
-      try {
-        const parsed = JSON.parse(value);
-        setHours(parsed);
-      } catch {
-        // Initialize with default values if parsing fails
-        initializeDefaultHours();
+      if (value === '24/7 Access') {
+        setIs24_7(true);
+        initializeAllDays24Hours();
+      } else {
+        try {
+          const parsed = JSON.parse(value);
+          setHours(parsed);
+          setIs24_7(false);
+        } catch {
+          // Initialize with default values if parsing fails
+          initializeDefaultHours();
+        }
       }
     } else {
       initializeDefaultHours();
@@ -61,6 +68,21 @@ export const OpeningHours: React.FC<OpeningHoursProps> = ({ value, onChange }) =
       };
     });
     setHours(defaultHours);
+    setIs24_7(false);
+  };
+
+  const initializeAllDays24Hours = () => {
+    const allDays24: Record<string, DayHours> = {};
+    DAYS.forEach(day => {
+      allDays24[day] = {
+        isOpen: true,
+        openTime: '00:00',
+        closeTime: '23:59',
+        is24Hours: true
+      };
+    });
+    setHours(allDays24);
+    onChange('24/7 Access');
   };
 
   const updateHours = (newHours: Record<string, DayHours>) => {
@@ -72,8 +94,10 @@ export const OpeningHours: React.FC<OpeningHoursProps> = ({ value, onChange }) =
     );
     
     if (allDays24Hours) {
+      setIs24_7(true);
       onChange('24/7 Access');
     } else {
+      setIs24_7(false);
       onChange(JSON.stringify(newHours));
     }
   };
@@ -128,16 +152,8 @@ export const OpeningHours: React.FC<OpeningHoursProps> = ({ value, onChange }) =
   };
 
   const set24HoursAll = () => {
-    const newHours: Record<string, DayHours> = {};
-    DAYS.forEach(day => {
-      newHours[day] = {
-        isOpen: true,
-        openTime: '00:00',
-        closeTime: '23:59',
-        is24Hours: true
-      };
-    });
-    updateHours(newHours);
+    setIs24_7(true);
+    initializeAllDays24Hours();
   };
 
   return (
@@ -222,7 +238,7 @@ export const OpeningHours: React.FC<OpeningHoursProps> = ({ value, onChange }) =
         ))}
       </div>
 
-      {value === '24/7 Access' && (
+      {is24_7 && (
         <div className="text-center p-4 bg-green-50 border border-green-200 rounded-lg">
           <span className="text-green-800 font-semibold">24/7 Access Available</span>
         </div>
