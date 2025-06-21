@@ -69,7 +69,7 @@ export const HomePage = () => {
 
     if (query) {
       filtered = filtered.filter(spot => 
-        spot.title.toLowerCase().includes(query.toLowerCase()) ||
+        spot.name.toLowerCase().includes(query.toLowerCase()) ||
         spot.address.toLowerCase().includes(query.toLowerCase())
       );
     }
@@ -78,13 +78,13 @@ export const HomePage = () => {
       // Apply price filter
       if (filters.priceRange && filters.priceRange[1] < 500) {
         filtered = filtered.filter(spot => 
-          spot.hourly_rate <= filters.priceRange[1]
+          spot.price <= filters.priceRange[1]
         );
       }
 
       // Apply availability filter
       if (filters.availableOnly) {
-        filtered = filtered.filter(spot => spot.is_available);
+        filtered = filtered.filter(spot => spot.available_slots > 0);
       }
 
       // Apply amenities filter
@@ -100,10 +100,10 @@ export const HomePage = () => {
       if (filters.sortBy) {
         switch (filters.sortBy) {
           case 'price_low':
-            filtered.sort((a, b) => a.hourly_rate - b.hourly_rate);
+            filtered.sort((a, b) => a.price - b.price);
             break;
           case 'price_high':
-            filtered.sort((a, b) => b.hourly_rate - a.hourly_rate);
+            filtered.sort((a, b) => b.price - a.price);
             break;
           default:
             break;
@@ -244,21 +244,21 @@ export const HomePage = () => {
                 {spot.images && spot.images.length > 0 ? (
                   <img
                     src={spot.images[0]}
-                    alt={spot.title}
+                    alt={spot.name}
                     className="w-full h-48 object-cover"
                   />
                 ) : (
                   <div className="w-full h-48 bg-gray-200 flex items-center justify-center">
-                    <span className="text-4xl">{getSpotTypeIcon(spot.spot_type)}</span>
+                    <span className="text-4xl">🅿️</span>
                   </div>
                 )}
-                {spot.is_available ? (
+                {spot.available_slots > 0 ? (
                   <Badge className="absolute top-2 right-2 bg-green-500">
-                    Available
+                    {spot.available_slots} Available
                   </Badge>
                 ) : (
                   <Badge className="absolute top-2 right-2 bg-red-500">
-                    Unavailable
+                    Full
                   </Badge>
                 )}
               </div>
@@ -267,7 +267,7 @@ export const HomePage = () => {
                 <div className="space-y-4">
                   <div onClick={() => handleSpotClick(spot.id)}>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                      {spot.title}
+                      {spot.name}
                     </h3>
                     <div className="flex items-center text-gray-600 mb-2">
                       <MapPin className="w-4 h-4 mr-1" />
@@ -278,15 +278,13 @@ export const HomePage = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <span className="text-2xl font-bold text-blue-600">
-                        ${spot.hourly_rate}
+                        ${spot.price}
                       </span>
-                      <span className="text-gray-600">/hour</span>
+                      <span className="text-gray-600">/{spot.price_type}</span>
                     </div>
-                    {spot.daily_rate && (
-                      <div className="text-sm text-gray-600">
-                        ${spot.daily_rate}/day
-                      </div>
-                    )}
+                    <div className="text-sm text-gray-600">
+                      {spot.total_slots} slot{spot.total_slots !== 1 ? 's' : ''}
+                    </div>
                   </div>
 
                   {spot.description && (
@@ -314,10 +312,10 @@ export const HomePage = () => {
 
                   <Button 
                     className="w-full bg-blue-600 hover:bg-blue-700"
-                    disabled={!spot.is_available}
+                    disabled={spot.available_slots === 0}
                     onClick={() => handleBookNow(spot.id)}
                   >
-                    {spot.is_available ? 'Book Now' : 'Unavailable'}
+                    {spot.available_slots > 0 ? 'Book Now' : 'Full'}
                   </Button>
                 </div>
               </CardContent>

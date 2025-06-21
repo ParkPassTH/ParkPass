@@ -2,12 +2,13 @@ import { supabase } from '../lib/supabase';
 
 export interface Profile {
   id: string;
-  full_name: string;
   email: string;
+  name: string;
   phone?: string | null;
-  user_type: 'host' | 'guest' | 'both';
+  role: 'user' | 'owner' | 'admin';
   avatar_url?: string | null;
-  bio?: string | null;
+  business_name?: string | null;
+  business_address?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -15,33 +16,39 @@ export interface Profile {
 export interface ParkingSpot {
   id: string;
   owner_id: string;
-  title: string;
+  name: string;
   description?: string | null;
-  spot_type: 'driveway' | 'garage' | 'street' | 'lot' | 'covered';
   address: string;
   latitude?: number | null;
   longitude?: number | null;
-  hourly_rate: number;
-  daily_rate?: number | null;
-  is_available: boolean;
-  images: string[];
+  total_slots: number;
+  available_slots: number;
+  price: number;
+  price_type: string;
   amenities: string[];
-  instructions?: string | null;
+  images: string[];
+  operating_hours?: any;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
+  search_vector?: any;
+  location?: any;
 }
 
 export interface Booking {
   id: string;
+  user_id: string;
   spot_id: string;
-  guest_id: string;
-  host_id: string;
+  vehicle_id?: string | null;
   start_time: string;
   end_time: string;
-  total_amount: number;
-  status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
-  guest_notes?: string | null;
-  host_notes?: string | null;
+  total_cost: number;
+  status: 'pending' | 'confirmed' | 'active' | 'completed' | 'cancelled';
+  payment_method?: 'qr_code' | 'bank_transfer' | null;
+  payment_status: 'pending' | 'verified' | 'rejected';
+  qr_code: string;
+  pin: string;
+  confirmed_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -49,11 +56,12 @@ export interface Booking {
 export interface Review {
   id: string;
   booking_id: string;
-  reviewer_id: string;
-  reviewee_id: string;
+  user_id: string;
+  spot_id: string;
   rating: number;
   comment?: string | null;
-  is_host_review: boolean;
+  photos?: string[];
+  is_anonymous: boolean;
   created_at: string;
 }
 
@@ -64,6 +72,7 @@ export interface Vehicle {
   model: string;
   license_plate: string;
   color: string;
+  is_active: boolean;
   created_at: string;
 }
 
@@ -120,7 +129,7 @@ class SupabaseService {
     return (data || []) as Vehicle[];
   }
 
-  async createVehicle(vehicleData: Omit<Vehicle, 'id' | 'user_id' | 'created_at'>): Promise<Vehicle> {
+  async createVehicle(vehicleData: Omit<Vehicle, 'id' | 'user_id' | 'created_at' | 'is_active'>): Promise<Vehicle> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -169,10 +178,10 @@ class SupabaseService {
     let query = supabase
       .from('parking_spots')
       .select('*')
-      .eq('is_available', true);
+      .eq('is_active', true);
 
     if (filters?.maxPrice) {
-      query = query.lte('hourly_rate', filters.maxPrice);
+      query = query.lte('price', filters.maxPrice);
     }
 
     const { data, error } = await query.order('created_at', { ascending: false });
@@ -251,11 +260,11 @@ class SupabaseService {
   // Booking methods
   async createBooking(bookingData: {
     spot_id: string;
-    host_id: string;
     start_time: string;
     end_time: string;
-    total_amount: number;
-    guest_notes?: string;
+    total_cost: number;
+    vehicle_id?: string;
+    payment_method?: 'qr_code' | 'bank_transfer';
   }): Promise<Booking> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
@@ -265,7 +274,7 @@ class SupabaseService {
       .insert({
         id: this.generateUUID(),
         ...bookingData,
-        guest_id: user.id,
+        user_id: user.id,
         status: 'pending'
       })
       .select()
@@ -282,7 +291,7 @@ class SupabaseService {
     const { data, error } = await supabase
       .from('bookings')
       .select('*')
-      .or(`guest_id.eq.${user.id},host_id.eq.${user.id}`)
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -308,18 +317,7 @@ class SupabaseService {
       .select('*');
 
     if (spotId) {
-      // Get reviews for bookings related to this spot
-      const { data: bookings } = await supabase
-        .from('bookings')
-        .select('id')
-        .eq('spot_id', spotId);
-
-      if (bookings && bookings.length > 0) {
-        const bookingIds = bookings.map(b => b.id);
-        query = query.in('booking_id', bookingIds);
-      } else {
-        return [];
-      }
+      query = query.eq('spot_id', spotId);
     }
 
     const { data, error } = await query.order('created_at', { ascending: false });
@@ -330,10 +328,11 @@ class SupabaseService {
 
   async createReview(reviewData: {
     booking_id: string;
-    reviewee_id: string;
+    spot_id: string;
     rating: number;
     comment?: string;
-    is_host_review: boolean;
+    photos?: string[];
+    is_anonymous?: boolean;
   }): Promise<Review> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
@@ -343,7 +342,7 @@ class SupabaseService {
       .insert({
         id: this.generateUUID(),
         ...reviewData,
-        reviewer_id: user.id
+        user_id: user.id
       })
       .select()
       .single();
@@ -363,7 +362,7 @@ class SupabaseService {
       password,
       options: {
         data: {
-          full_name: fullName.trim()
+          name: fullName.trim()
         }
       }
     });
@@ -394,25 +393,20 @@ class SupabaseService {
 
   // Search and filter methods
   async searchParkingSpots(query: string, filters?: {
-    spot_type?: string;
-    max_hourly_rate?: number;
+    max_price?: number;
     amenities?: string[];
   }): Promise<ParkingSpot[]> {
     let supabaseQuery = supabase
       .from('parking_spots')
       .select('*')
-      .eq('is_available', true);
+      .eq('is_active', true);
 
     if (query) {
-      supabaseQuery = supabaseQuery.or(`title.ilike.%${query}%,address.ilike.%${query}%,description.ilike.%${query}%`);
+      supabaseQuery = supabaseQuery.or(`name.ilike.%${query}%,address.ilike.%${query}%,description.ilike.%${query}%`);
     }
 
-    if (filters?.spot_type) {
-      supabaseQuery = supabaseQuery.eq('spot_type', filters.spot_type);
-    }
-
-    if (filters?.max_hourly_rate) {
-      supabaseQuery = supabaseQuery.lte('hourly_rate', filters.max_hourly_rate);
+    if (filters?.max_price) {
+      supabaseQuery = supabaseQuery.lte('price', filters.max_price);
     }
 
     if (filters?.amenities && filters.amenities.length > 0) {
