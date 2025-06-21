@@ -16,7 +16,8 @@ import {
   ChevronRight,
   Calendar,
   Info,
-  Check
+  Check,
+  X
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ParkingSpot } from '../lib/supabase';
@@ -30,6 +31,7 @@ export const ParkingSpotDetail: React.FC = () => {
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showFullScreenImage, setShowFullScreenImage] = useState(false);
 
   useEffect(() => {
     const fetchSpotDetails = async () => {
@@ -99,6 +101,10 @@ export const ParkingSpotDetail: React.FC = () => {
     setCurrentImageIndex((prev) => (prev === 0 ? spot.images.length - 1 : prev - 1));
   };
 
+  const toggleFullScreenImage = () => {
+    setShowFullScreenImage(!showFullScreenImage);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -135,17 +141,44 @@ export const ParkingSpotDetail: React.FC = () => {
     }
   };
 
-  const formatOperatingHours = () => {
+  // Parse operating hours
+  const parseOperatingHours = () => {
     if (typeof spot.operating_hours === 'string') {
-      return spot.operating_hours;
+      if (spot.operating_hours === '24/7 Access' || spot.operating_hours === '24/7') {
+        return {
+          is24_7: true,
+          days: {}
+        };
+      }
+      
+      try {
+        return {
+          is24_7: false,
+          days: JSON.parse(spot.operating_hours)
+        };
+      } catch (e) {
+        return {
+          is24_7: false,
+          days: {}
+        };
+      }
     }
     
     if (spot.operating_hours?.["24_7"]) {
-      return "24/7";
+      return {
+        is24_7: true,
+        days: {}
+      };
     }
     
-    return "Check details";
+    return {
+      is24_7: false,
+      days: spot.operating_hours || {}
+    };
   };
+
+  const operatingHours = parseOperatingHours();
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -164,13 +197,17 @@ export const ParkingSpotDetail: React.FC = () => {
                 <img
                   src={spot.images[currentImageIndex]}
                   alt={spot.name}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover cursor-pointer"
+                  onClick={toggleFullScreenImage}
                 />
                 
                 {spot.images.length > 1 && (
                   <>
                     <button
-                      onClick={prevImage}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        prevImage();
+                      }}
                       className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-80 p-2 rounded-full shadow-md hover:bg-opacity-100 transition-all z-10"
                       aria-label="Previous image"
                     >
@@ -178,7 +215,10 @@ export const ParkingSpotDetail: React.FC = () => {
                     </button>
                     
                     <button
-                      onClick={nextImage}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        nextImage();
+                      }}
                       className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-80 p-2 rounded-full shadow-md hover:bg-opacity-100 transition-all z-10"
                       aria-label="Next image"
                     >
@@ -189,7 +229,10 @@ export const ParkingSpotDetail: React.FC = () => {
                       {spot.images.map((_, index) => (
                         <button
                           key={index}
-                          onClick={() => setCurrentImageIndex(index)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCurrentImageIndex(index);
+                          }}
                           className={`w-3 h-3 rounded-full transition-colors ${
                             currentImageIndex === index ? 'bg-white' : 'bg-white bg-opacity-50'
                           }`}
@@ -245,15 +288,6 @@ export const ParkingSpotDetail: React.FC = () => {
             <div className="grid md:grid-cols-3 gap-4 mb-8 p-5 bg-blue-50 rounded-xl">
               <div className="text-center">
                 <div className="flex items-center justify-center space-x-1 text-sm text-blue-700 mb-2">
-                  <Clock className="h-5 w-5" />
-                  <span className="font-medium">Opening & Closing Times</span>
-                </div>
-                <div className="font-semibold text-blue-900">
-                  {formatOperatingHours()}
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="flex items-center justify-center space-x-1 text-sm text-blue-700 mb-2">
                   <Car className="h-5 w-5" />
                   <span className="font-medium">Availability</span>
                 </div>
@@ -270,6 +304,66 @@ export const ParkingSpotDetail: React.FC = () => {
                   {spot.price_type} rate
                 </div>
               </div>
+              <div className="text-center">
+                <div className="flex items-center justify-center space-x-1 text-sm text-blue-700 mb-2">
+                  <Phone className="h-5 w-5" />
+                  <span className="font-medium">Contact</span>
+                </div>
+                <div className="font-semibold text-blue-900">
+                  {spot.phone || 'Not available'}
+                </div>
+              </div>
+            </div>
+
+            {/* Opening & Closing Times */}
+            <div className="mb-8">
+              <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                <Clock className="h-5 w-5 mr-2" />
+                Opening & Closing Times
+              </h3>
+              
+              {operatingHours.is24_7 ? (
+                <div className="p-4 bg-green-50 border border-green-100 rounded-lg text-center">
+                  <span className="text-lg font-semibold text-green-800">Open 24/7</span>
+                  <p className="text-sm text-green-700 mt-1">Available all day, every day</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {days.map(day => {
+                    const dayData = operatingHours.days[day];
+                    const isOpen = dayData?.isOpen;
+                    const is24Hours = dayData?.is24Hours;
+                    const openTime = dayData?.openTime || '09:00';
+                    const closeTime = dayData?.closeTime || '17:00';
+                    
+                    return (
+                      <div 
+                        key={day} 
+                        className={`p-3 rounded-lg border ${
+                          isOpen 
+                            ? 'border-blue-100 bg-blue-50' 
+                            : 'border-gray-200 bg-gray-50 opacity-60'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className={`font-medium ${isOpen ? 'text-blue-900' : 'text-gray-500'}`}>
+                            {day}
+                          </span>
+                          {isOpen ? (
+                            is24Hours ? (
+                              <span className="text-green-700 font-medium">24 Hours</span>
+                            ) : (
+                              <span className="text-blue-700">{openTime} - {closeTime}</span>
+                            )
+                          ) : (
+                            <span className="text-gray-500">Closed</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Description */}
@@ -393,6 +487,69 @@ export const ParkingSpotDetail: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Full Screen Image Modal */}
+      {showFullScreenImage && (
+        <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center">
+          <button 
+            onClick={toggleFullScreenImage}
+            className="absolute top-4 right-4 text-white p-2 hover:bg-gray-800 rounded-full transition-colors"
+            aria-label="Close full screen image"
+          >
+            <X className="h-8 w-8" />
+          </button>
+          
+          <div className="relative w-full h-full flex items-center justify-center p-4">
+            <img
+              src={spot.images[currentImageIndex]}
+              alt={spot.name}
+              className="max-w-full max-h-full object-contain"
+            />
+            
+            {spot.images.length > 1 && (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    prevImage();
+                  }}
+                  className="absolute left-4 md:left-8 p-3 bg-black bg-opacity-50 hover:bg-opacity-70 rounded-full text-white transition-colors"
+                  aria-label="Previous image"
+                >
+                  <ChevronLeft className="h-8 w-8" />
+                </button>
+                
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    nextImage();
+                  }}
+                  className="absolute right-4 md:right-8 p-3 bg-black bg-opacity-50 hover:bg-opacity-70 rounded-full text-white transition-colors"
+                  aria-label="Next image"
+                >
+                  <ChevronRight className="h-8 w-8" />
+                </button>
+                
+                <div className="absolute bottom-8 left-0 right-0 flex justify-center space-x-3">
+                  {spot.images.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentImageIndex(index);
+                      }}
+                      className={`w-3 h-3 rounded-full transition-colors ${
+                        currentImageIndex === index ? 'bg-white' : 'bg-white bg-opacity-50'
+                      }`}
+                      aria-label={`Go to image ${index + 1}`}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
