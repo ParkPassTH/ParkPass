@@ -48,17 +48,23 @@ export const MapPicker: React.FC<MapPickerProps> = ({
   const mapInstanceRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
   const [gettingLocation, setGettingLocation] = useState(false);
+  const [mapInitialized, setMapInitialized] = useState(false);
+
+  // Clean up function to remove map instance
+  const cleanupMap = () => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+      markerRef.current = null;
+    }
+  };
 
   useEffect(() => {
     const initMap = async () => {
       if (!mapRef.current) return;
       
       // Clean up any existing map instance before creating a new one
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-        markerRef.current = null;
-      }
+      cleanupMap();
       
       // Clear the container completely to prevent re-initialization errors
       mapRef.current.innerHTML = '';
@@ -97,25 +103,25 @@ export const MapPicker: React.FC<MapPickerProps> = ({
           await reverseGeocode(lat, lng);
         }
       });
+      
+      setMapInitialized(true);
     };
 
-    initMap();
+    if (!mapInitialized) {
+      initMap();
+    }
 
     return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-        markerRef.current = null;
-      }
+      cleanupMap();
     };
-  }, []);
+  }, [latitude, longitude, mapInitialized]);
 
   useEffect(() => {
-    if (mapInstanceRef.current && markerRef.current) {
+    if (mapInstanceRef.current && markerRef.current && mapInitialized) {
       markerRef.current.setLatLng([latitude, longitude]);
       mapInstanceRef.current.setView([latitude, longitude], 13);
     }
-  }, [latitude, longitude]);
+  }, [latitude, longitude, mapInitialized]);
 
   const reverseGeocode = async (lat: number, lng: number) => {
     try {
