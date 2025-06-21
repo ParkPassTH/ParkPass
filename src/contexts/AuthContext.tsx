@@ -59,6 +59,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadProfile = async (userId: string) => {
     try {
+      console.log('Loading profile for user:', userId);
+      
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
@@ -67,38 +69,125 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (error) {
         console.error('Error loading profile:', error);
-        setProfile(null);
+        
         // Handle invalid session or JWT errors
         if (
           error.code === 'PGRST301' || // JWT expired/invalid
           (error.message && error.message.toLowerCase().includes('jwt'))
         ) {
+          console.log('JWT error detected, signing out');
           await supabase.auth.signOut();
           setUser(null);
           setProfile(null);
           setLoading(false);
           return;
         }
-      } else {
-        setProfile(profile);
-        if (!profile) {
-          console.log('Profile not found, user may need to complete setup');
+        
+        // For other errors, create a basic profile if user exists
+        if (error.code === 'PGRST116' || !profile) {
+          console.log('Profile not found, creating basic profile');
+          await createBasicProfile(userId);
+          return;
         }
+      } else if (!profile) {
+        console.log('No profile found, creating basic profile');
+        await createBasicProfile(userId);
+        return;
+      } else {
+        console.log('Profile loaded successfully:', profile);
+        setProfile(profile);
       }
     } catch (error: any) {
       console.error('Error loading profile:', error);
-      setProfile(null);
+      
       // Handle fetch/network errors
       if (error.message && error.message.toLowerCase().includes('jwt')) {
+        console.log('JWT error in catch, signing out');
         await supabase.auth.signOut();
         setUser(null);
         setProfile(null);
         setLoading(false);
         return;
       }
+      
+      // Try to create a basic profile for other errors
+      console.log('Error loading profile, attempting to create basic profile');
+      await createBasicProfile(userId);
     } finally {
-      // Always set loading to false when profile loading is complete
       setLoading(false);
+    }
+  };
+
+  const createBasicProfile = async (userId: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('No user found when creating profile');
+        setProfile(null);
+        return;
+      }
+
+      console.log('Creating basic profile for user:', user.email);
+      
+      // Create a basic profile with available user data
+      const basicProfile: Partial<Profile> = {
+        id: userId,
+        email: user.email || '',
+        name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+        phone: user.user_metadata?.phone || null,
+        role: user.user_metadata?.role || 'user',
+        avatar_url: user.user_metadata?.avatar_url || null,
+        business_name: user.user_metadata?.business_name || null,
+        business_address: user.user_metadata?.business_address || null,
+      };
+
+      const { data: newProfile, error } = await supabase
+        .from('profiles')
+        .insert(basicProfile)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating basic profile:', error);
+        // If we can't create a profile, create a mock one for the session
+        const mockProfile: Profile = {
+          id: userId,
+          email: user.email || '',
+          name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+          phone: user.user_metadata?.phone || null,
+          role: (user.user_metadata?.role as 'user' | 'owner' | 'admin') || 'user',
+          avatar_url: user.user_metadata?.avatar_url || null,
+          business_name: user.user_metadata?.business_name || null,
+          business_address: user.user_metadata?.business_address || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        setProfile(mockProfile);
+        console.log('Using mock profile:', mockProfile);
+      } else {
+        console.log('Basic profile created successfully:', newProfile);
+        setProfile(newProfile as Profile);
+      }
+    } catch (error) {
+      console.error('Error in createBasicProfile:', error);
+      // Create a minimal mock profile as fallback
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const fallbackProfile: Profile = {
+          id: userId,
+          email: user.email || '',
+          name: user.email?.split('@')[0] || 'User',
+          phone: null,
+          role: 'user',
+          avatar_url: null,
+          business_name: null,
+          business_address: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        setProfile(fallbackProfile);
+        console.log('Using fallback profile:', fallbackProfile);
+      }
     }
   };
 
@@ -126,7 +215,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (error: any) {
       console.error('❌ Sign in error:', error.message);
-      setLoading(false); // Set loading to false on error
+      setLoading(false);
       throw error;
     }
     // Note: Don't set loading to false here as loadProfile will handle it
