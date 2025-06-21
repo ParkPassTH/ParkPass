@@ -75,7 +75,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) {
         setProfile(null);
@@ -90,13 +90,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setLoading(false);
           return;
         }
-        if (error.code === 'PGRST116') {
-          console.log('Profile not found, user may need to complete setup');
-        } else {
-          console.error('Error loading profile:', error);
-        }
+        console.error('Error loading profile:', error);
       } else {
         setProfile(profile);
+        if (!profile) {
+          console.log('Profile not found, user may need to complete setup');
+        }
       }
     } catch (error: any) {
       setProfile(null);

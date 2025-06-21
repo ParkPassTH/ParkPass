@@ -1,4 +1,3 @@
-
 import { supabase } from '../lib/supabase';
 
 export interface Profile {
@@ -82,7 +81,7 @@ class SupabaseService {
       .from('profiles')
       .select('*')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('Error fetching profile:', error);

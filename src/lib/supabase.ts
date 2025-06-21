@@ -87,6 +87,7 @@ const createSupabaseClient = () => {
         select: (columns?: string) => ({
           eq: (column: string, value: any) => ({
             single: async () => ({ data: null, error: null }),
+            maybeSingle: async () => ({ data: null, error: null }),
             then: async (callback: any) => callback({ data: [], error: null })
           }),
           then: async (callback: any) => callback({ data: [], error: null })
@@ -242,7 +243,7 @@ export const getCurrentProfile = async () => {
     .from('profiles')
     .select('*')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
   return profile;
 };
