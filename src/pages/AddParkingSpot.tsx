@@ -39,9 +39,6 @@ export const AddParkingSpot: React.FC = () => {
     features: {
       allowExtensions: true,
       requireQREntry: true,
-      plateRestriction: false,
-      valetService: false,
-      carWash: false,
     }
   });
 
@@ -573,16 +570,10 @@ export const AddParkingSpot: React.FC = () => {
                       <p className="font-medium text-gray-900">
                         {key === 'allowExtensions' && 'Allow Time Extensions'}
                         {key === 'requireQREntry' && 'Require QR Code Entry'}
-                        {key === 'plateRestriction' && 'License Plate Restriction'}
-                        {key === 'valetService' && 'Valet Service Available'}
-                        {key === 'carWash' && 'Car Wash Service'}
                       </p>
                       <p className="text-sm text-gray-600">
                         {key === 'allowExtensions' && 'Users can extend their parking time'}
                         {key === 'requireQREntry' && 'Entry requires QR code or PIN validation'}
-                        {key === 'plateRestriction' && 'Restrict access to registered license plates only'}
-                        {key === 'valetService' && 'Professional valet parking service'}
-                        {key === 'carWash' && 'On-site car washing services'}
                       </p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
