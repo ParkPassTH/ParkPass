@@ -7,14 +7,16 @@ import { MapPin, Car, Wifi, Camera, Shield } from 'lucide-react';
 import { useParkingSpots } from '../hooks/useSupabase';
 import { ParkingSpot } from '../services/supabaseService';
 import { SearchFilters } from '../components/SearchFilters';
-import { MapPicker } from '../components/MapPicker';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { LatLngExpression } from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 export const HomePage = () => {
   const { spots, loading, error } = useParkingSpots();
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredSpots, setFilteredSpots] = useState<ParkingSpot[]>([]);
   const [showMap, setShowMap] = useState(true);
-  const [mapCenter, setMapCenter] = useState({ lat: 40.7128, lng: -74.0060 });
+  const [mapCenter, setMapCenter] = useState<LatLngExpression>([13.7563, 100.5018]); // Default to Bangkok
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -37,7 +39,7 @@ export const HomePage = () => {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords;
-          setMapCenter({ lat: latitude, lng: longitude });
+          setMapCenter([latitude, longitude]);
           // Sort spots by distance from user location
           const sortedSpots = [...spots].sort((a, b) => {
             const distA = calculateDistance(latitude, longitude, a.latitude || 0, a.longitude || 0);
@@ -145,10 +147,6 @@ export const HomePage = () => {
     navigate(`/spot/${spotId}`);
   };
 
-  const handleLocationChange = (lat: number, lng: number) => {
-    setMapCenter({ lat, lng });
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -214,13 +212,43 @@ export const HomePage = () => {
         </div>
         
         {showMap && (
-          <div className="mb-8">
-            <MapPicker
-              latitude={mapCenter.lat}
-              longitude={mapCenter.lng}
-              onLocationChange={handleLocationChange}
-              height="400px"
-            />
+          <div className="mb-8 h-[400px] rounded-lg overflow-hidden border border-gray-200">
+            <MapContainer 
+              center={mapCenter} 
+              zoom={13} 
+              style={{ height: '100%', width: '100%' }}
+              className="z-0"
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              
+              {/* Add markers for each parking spot */}
+              {displaySpots.map((spot) => (
+                <Marker 
+                  key={spot.id} 
+                  position={[spot.latitude || 0, spot.longitude || 0]}
+                >
+                  <Popup>
+                    <div className="p-1">
+                      <h3 className="font-semibold">{spot.name}</h3>
+                      <p className="text-sm">{spot.address}</p>
+                      <p className="text-sm font-medium text-blue-600">${spot.price}/{spot.price_type}</p>
+                      <p className="text-xs mt-1">
+                        {spot.available_slots} of {spot.total_slots} spots available
+                      </p>
+                      <button 
+                        onClick={() => handleSpotClick(spot.id)}
+                        className="mt-2 text-xs text-blue-600 hover:text-blue-800"
+                      >
+                        View Details
+                      </button>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+            </MapContainer>
           </div>
         )}
       </div>
