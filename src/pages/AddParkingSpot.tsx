@@ -181,34 +181,60 @@ export const AddParkingSpot: React.FC = () => {
     }
   };
 
+  // Function to ensure the storage bucket exists
+  const ensureStorageBucket = async () => {
+    try {
+      // Check if the bucket exists by trying to get its details
+      const { data, error } = await supabase.storage.getBucket('parking-spots');
+      
+      if (error) {
+        console.error('Error checking bucket:', error);
+        throw new Error('Error creating bucket: ' + error.message);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error ensuring storage bucket:', error);
+      throw new Error('Failed to prepare storage bucket');
+    }
+  };
+
   const uploadImages = async (): Promise<string[]> => {
     if (imageFiles.length === 0) return [];
     
-    const uploadedUrls: string[] = [];
-    
-    for (const file of imageFiles) {
-      const fileName = `${Date.now()}-${file.name}`;
-      const filePath = `${fileName}`;
+    try {
+      // Ensure the bucket exists
+      await ensureStorageBucket();
       
-      try {
-        const { error } = await supabase.storage
-          .from('parking-spots')
-          .upload(filePath, file);
-          
-        if (error) throw error;
+      const uploadedUrls: string[] = [];
+      
+      for (const file of imageFiles) {
+        const fileName = `${Date.now()}-${file.name}`;
+        const filePath = `${fileName}`;
         
-        const { data } = supabase.storage
-          .from('parking-spots')
-          .getPublicUrl(filePath);
+        try {
+          const { error } = await supabase.storage
+            .from('parking-spots')
+            .upload(filePath, file);
+            
+          if (error) throw error;
           
-        uploadedUrls.push(data.publicUrl);
-      } catch (error) {
-        console.error('Error uploading image:', error);
-        throw new Error('Failed to upload images');
+          const { data } = supabase.storage
+            .from('parking-spots')
+            .getPublicUrl(filePath);
+            
+          uploadedUrls.push(data.publicUrl);
+        } catch (error) {
+          console.error('Error uploading image:', error);
+          throw new Error('Error uploading image: ' + (error as any).message);
+        }
       }
+      
+      return uploadedUrls;
+    } catch (error) {
+      console.error('Upload error:', error);
+      throw error;
     }
-    
-    return uploadedUrls;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -516,8 +542,6 @@ export const AddParkingSpot: React.FC = () => {
                     </label>
                   </div>
                 )}
-                
-                {/* Add URL Button - only show if less than 4 images */}
               </div>
               
               <div className="text-sm text-gray-600 flex items-center space-x-2">

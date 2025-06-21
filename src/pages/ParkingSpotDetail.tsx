@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   MapPin, 
   Star, 
@@ -13,17 +13,73 @@ import {
   Umbrella,
   ArrowLeft
 } from 'lucide-react';
-import { mockParkingSpots, mockReviews } from '../data/mockData';
+import { supabase } from '../lib/supabase';
+import { ParkingSpot } from '../lib/supabase';
 
 export const ParkingSpotDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [isFavorited, setIsFavorited] = useState(false);
   const [selectedImage, setSelectedImage] = useState(0);
-  
-  const spot = mockParkingSpots.find(s => s.id === id);
-  const reviews = mockReviews.filter(r => r.spotId === id);
+  const [spot, setSpot] = useState<ParkingSpot | null>(null);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!spot) {
+  useEffect(() => {
+    const fetchSpotDetails = async () => {
+      if (!id) return;
+      
+      setLoading(true);
+      try {
+        // Fetch the parking spot details
+        const { data: spotData, error: spotError } = await supabase
+          .from('parking_spots')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (spotError) throw spotError;
+        
+        setSpot(spotData);
+        
+        // Fetch reviews for this spot
+        const { data: reviewsData, error: reviewsError } = await supabase
+          .from('reviews')
+          .select(`
+            id,
+            rating,
+            comment,
+            photos,
+            is_anonymous,
+            created_at,
+            profiles:user_id (name)
+          `)
+          .eq('spot_id', id);
+          
+        if (reviewsError) throw reviewsError;
+        
+        setReviews(reviewsData || []);
+      } catch (err: any) {
+        console.error('Error fetching spot details:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSpotDetails();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (error || !spot) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -43,10 +99,10 @@ export const ParkingSpotDetail: React.FC = () => {
   };
 
   const getAmenityIcon = (amenity: string) => {
-    switch (amenity) {
-      case 'EV Charging': return <Zap className="h-5 w-5 text-green-600" />;
-      case 'CCTV Security': return <Shield className="h-5 w-5 text-blue-600" />;
-      case 'Covered Parking': return <Umbrella className="h-5 w-5 text-purple-600" />;
+    switch (amenity.toLowerCase()) {
+      case 'ev charging': return <Zap className="h-5 w-5 text-green-600" />;
+      case 'cctv security': return <Shield className="h-5 w-5 text-blue-600" />;
+      case 'covered parking': return <Umbrella className="h-5 w-5 text-purple-600" />;
       default: return <Car className="h-5 w-5 text-gray-600" />;
     }
   };
@@ -63,25 +119,33 @@ export const ParkingSpotDetail: React.FC = () => {
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
           {/* Image Gallery */}
           <div className="relative">
-            <img
-              src={spot.images[selectedImage]}
-              alt={spot.name}
-              className="w-full h-64 md:h-80 object-cover"
-            />
+            {spot.images && spot.images.length > 0 ? (
+              <img
+                src={spot.images[selectedImage]}
+                alt={spot.name}
+                className="w-full h-64 md:h-80 object-cover"
+              />
+            ) : (
+              <div className="w-full h-64 md:h-80 bg-gray-200 flex items-center justify-center">
+                <Car className="h-16 w-16 text-gray-400" />
+              </div>
+            )}
             <div className="absolute top-4 right-4 bg-white px-3 py-2 rounded-full font-semibold text-lg">
-              {formatPrice(spot.price, spot.priceType)}
+              {formatPrice(spot.price, spot.price_type)}
             </div>
-            <div className="absolute bottom-4 left-4 flex space-x-2">
-              {spot.images.map((_, index) => (
-                <button
-                  key={index}
-                  onClick={() => setSelectedImage(index)}
-                  className={`w-3 h-3 rounded-full transition-colors ${
-                    selectedImage === index ? 'bg-white' : 'bg-white bg-opacity-50'
-                  }`}
-                />
-              ))}
-            </div>
+            {spot.images && spot.images.length > 1 && (
+              <div className="absolute bottom-4 left-4 flex space-x-2">
+                {spot.images.map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setSelectedImage(index)}
+                    className={`w-3 h-3 rounded-full transition-colors ${
+                      selectedImage === index ? 'bg-white' : 'bg-white bg-opacity-50'
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="p-6">
@@ -98,8 +162,8 @@ export const ParkingSpotDetail: React.FC = () => {
                 <div className="flex items-center space-x-2">
                   <div className="flex items-center space-x-1">
                     <Star className="h-5 w-5 text-yellow-400 fill-current" />
-                    <span className="font-semibold">{spot.rating}</span>
-                    <span className="text-gray-500">({spot.reviewCount} reviews)</span>
+                    <span className="font-semibold">{spot.rating || '0.0'}</span>
+                    <span className="text-gray-500">({spot.review_count || 0} reviews)</span>
                   </div>
                 </div>
               </div>
@@ -122,7 +186,13 @@ export const ParkingSpotDetail: React.FC = () => {
                   <Clock className="h-4 w-4" />
                   <span>Hours</span>
                 </div>
-                <div className="font-semibold">{spot.openingHours}</div>
+                <div className="font-semibold">
+                  {typeof spot.operating_hours === 'string' 
+                    ? spot.operating_hours 
+                    : spot.operating_hours?.["24_7"] 
+                      ? "24/7" 
+                      : "Check details"}
+                </div>
               </div>
               <div className="text-center">
                 <div className="flex items-center justify-center space-x-1 text-sm text-gray-600 mb-1">
@@ -130,7 +200,7 @@ export const ParkingSpotDetail: React.FC = () => {
                   <span>Available</span>
                 </div>
                 <div className="font-semibold">
-                  {spot.availableSlots} / {spot.totalSlots} spots
+                  {spot.available_slots} / {spot.total_slots} spots
                 </div>
               </div>
               <div className="text-center">
@@ -138,7 +208,7 @@ export const ParkingSpotDetail: React.FC = () => {
                   <Phone className="h-4 w-4" />
                   <span>Contact</span>
                 </div>
-                <div className="font-semibold">{spot.phone || 'N/A'}</div>
+                <div className="font-semibold">Contact Owner</div>
               </div>
             </div>
 
@@ -147,57 +217,78 @@ export const ParkingSpotDetail: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 About this parking spot
               </h3>
-              <p className="text-gray-600">{spot.description}</p>
+              <p className="text-gray-600">{spot.description || 'No description provided.'}</p>
             </div>
 
             {/* Amenities */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                Amenities
-              </h3>
-              <div className="grid md:grid-cols-2 gap-3">
-                {spot.amenities.map((amenity, index) => (
-                  <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                    {getAmenityIcon(amenity)}
-                    <span className="text-gray-700">{amenity}</span>
-                  </div>
-                ))}
+            {spot.amenities && spot.amenities.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                  Amenities
+                </h3>
+                <div className="grid md:grid-cols-2 gap-3">
+                  {spot.amenities.map((amenity, index) => (
+                    <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                      {getAmenityIcon(amenity)}
+                      <span className="text-gray-700">{amenity}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Reviews */}
             <div className="mb-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                Recent Reviews
+                Reviews
               </h3>
               <div className="space-y-4">
-                {reviews.map((review) => (
-                  <div key={review.id} className="p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-semibold text-gray-900">
-                          {review.userName}
+                {reviews.length > 0 ? (
+                  reviews.map((review) => (
+                    <div key={review.id} className="p-4 bg-gray-50 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-semibold text-gray-900">
+                            {review.is_anonymous ? 'Anonymous User' : review.profiles?.name || 'User'}
+                          </span>
+                          <div className="flex items-center space-x-1">
+                            {[...Array(5)].map((_, i) => (
+                              <Star
+                                key={i}
+                                className={`h-4 w-4 ${
+                                  i < review.rating
+                                    ? 'text-yellow-400 fill-current'
+                                    : 'text-gray-300'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <span className="text-sm text-gray-500">
+                          {new Date(review.created_at).toLocaleDateString()}
                         </span>
-                        <div className="flex items-center space-x-1">
-                          {[...Array(5)].map((_, i) => (
-                            <Star
-                              key={i}
-                              className={`h-4 w-4 ${
-                                i < review.rating
-                                  ? 'text-yellow-400 fill-current'
-                                  : 'text-gray-300'
-                              }`}
+                      </div>
+                      {review.comment && <p className="text-gray-700">{review.comment}</p>}
+                      {review.photos && review.photos.length > 0 && (
+                        <div className="flex space-x-2 mt-2">
+                          {review.photos.map((photo: string, index: number) => (
+                            <img
+                              key={index}
+                              src={photo}
+                              alt={`Review photo ${index + 1}`}
+                              className="w-16 h-16 object-cover rounded-lg"
                             />
                           ))}
                         </div>
-                      </div>
-                      <span className="text-sm text-gray-500">
-                        {new Date(review.createdAt).toLocaleDateString()}
-                      </span>
+                      )}
                     </div>
-                    <p className="text-gray-700">{review.comment}</p>
+                  ))
+                ) : (
+                  <div className="text-center py-6 text-gray-500">
+                    <Star className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                    <p>No reviews yet</p>
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
@@ -213,12 +304,6 @@ export const ParkingSpotDetail: React.FC = () => {
                 <Navigation className="h-5 w-5" />
                 <span>Navigate</span>
               </button>
-              {spot.phone && (
-                <button className="flex items-center justify-center space-x-2 px-6 py-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors font-semibold">
-                  <Phone className="h-5 w-5" />
-                  <span>Call</span>
-                </button>
-              )}
             </div>
           </div>
         </div>
