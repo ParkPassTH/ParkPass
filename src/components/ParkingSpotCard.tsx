@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { MapPin, Star, Car, Clock, Zap } from 'lucide-react';
 import { ParkingSpot } from '../types';
 
@@ -8,13 +8,21 @@ interface ParkingSpotCardProps {
 }
 
 export const ParkingSpotCard: React.FC<ParkingSpotCardProps> = ({ spot }) => {
+  const navigate = useNavigate();
+  
   const formatPrice = (price: number, type: string) => {
     return `$${price}/${type}`;
   };
 
+  const handleBookNow = (e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent the card click from triggering
+    e.stopPropagation(); // Stop event propagation
+    navigate(`/book/${spot.id}`);
+  };
+
   return (
-    <Link to={`/spot/${spot.id}`} className="block">
-      <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1 overflow-hidden">
+    <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1 overflow-hidden">
+      <Link to={`/spot/${spot.id}`} className="block">
         <div className="relative">
           <img
             src={spot.images[0]}
@@ -73,8 +81,16 @@ export const ParkingSpotCard: React.FC<ParkingSpotCardProps> = ({ spot }) => {
               }
             </div>
           </div>
+          
+          <button
+            onClick={handleBookNow}
+            disabled={spot.availableSlots === 0}
+            className="w-full mt-4 bg-blue-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+          >
+            {spot.availableSlots > 0 ? 'Book Now' : 'Full'}
+          </button>
         </div>
-      </div>
-    </Link>
+      </Link>
+    </div>
   );
 };

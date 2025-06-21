@@ -11,6 +11,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { LatLngExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { ParkingSpotCard } from '../components/ParkingSpotCard';
 
 // Fix for default markers in React Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -145,31 +146,6 @@ export const HomePage = () => {
 
   const displaySpots = filteredSpots.length > 0 ? filteredSpots : spots;
 
-  const getSpotTypeIcon = (type: string) => {
-    switch (type) {
-      case 'garage': return '🏠';
-      case 'driveway': return '🚗';
-      case 'street': return '🛣️';
-      case 'lot': return '🅿️';
-      case 'covered': return '☂️';
-      default: return '🅿️';
-    }
-  };
-
-  const getAmenityIcon = (amenity: string) => {
-    switch (amenity.toLowerCase()) {
-      case 'wifi': return <Wifi className="w-4 h-4" />;
-      case 'security camera': return <Camera className="w-4 h-4" />;
-      case 'cctv': return <Camera className="w-4 h-4" />;
-      case 'security': return <Shield className="w-4 h-4" />;
-      default: return <Car className="w-4 h-4" />;
-    }
-  };
-
-  const handleBookNow = (spotId: string) => {
-    navigate(`/book/${spotId}`);
-  };
-
   const handleSpotClick = (spotId: string) => {
     navigate(`/spot/${spotId}`);
   };
@@ -297,87 +273,7 @@ export const HomePage = () => {
         {/* Parking Spots Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {displaySpots.map((spot: ParkingSpot) => (
-            <Card key={spot.id} className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer">
-              <div className="relative" onClick={() => handleSpotClick(spot.id)}>
-                {spot.images && spot.images.length > 0 ? (
-                  <img
-                    src={spot.images[0]}
-                    alt={spot.name}
-                    className="w-full h-48 object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-48 bg-gray-200 flex items-center justify-center">
-                    <span className="text-4xl">🅿️</span>
-                  </div>
-                )}
-                {spot.available_slots > 0 ? (
-                  <Badge className="absolute top-2 right-2 bg-green-500">
-                    {spot.available_slots} Available
-                  </Badge>
-                ) : (
-                  <Badge className="absolute top-2 right-2 bg-red-500">
-                    Full
-                  </Badge>
-                )}
-              </div>
-              
-              <CardContent className="p-6">
-                <div className="space-y-4">
-                  <div onClick={() => handleSpotClick(spot.id)}>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                      {spot.name}
-                    </h3>
-                    <div className="flex items-center text-gray-600 mb-2">
-                      <MapPin className="w-4 h-4 mr-1" />
-                      <span className="text-sm">{spot.address}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-2xl font-bold text-blue-600">
-                        ${spot.price}
-                      </span>
-                      <span className="text-gray-600">/{spot.price_type}</span>
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      {spot.total_slots} slot{spot.total_slots !== 1 ? 's' : ''}
-                    </div>
-                  </div>
-
-                  {spot.description && (
-                    <p className="text-gray-600 text-sm line-clamp-2">
-                      {spot.description}
-                    </p>
-                  )}
-
-                  {/* Amenities */}
-                  {spot.amenities && spot.amenities.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {spot.amenities.slice(0, 3).map((amenity, index) => (
-                        <Badge key={index} variant="secondary" className="text-xs">
-                          <span className="mr-1">{getAmenityIcon(amenity)}</span>
-                          {amenity}
-                        </Badge>
-                      ))}
-                      {spot.amenities.length > 3 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{spot.amenities.length - 3} more
-                        </Badge>
-                      )}
-                    </div>
-                  )}
-
-                  <Button 
-                    className="w-full bg-blue-600 hover:bg-blue-700"
-                    disabled={spot.available_slots === 0}
-                    onClick={() => handleBookNow(spot.id)}
-                  >
-                    {spot.available_slots > 0 ? 'Book Now' : 'Full'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <ParkingSpotCard key={spot.id} spot={spot} />
           ))}
         </div>
 

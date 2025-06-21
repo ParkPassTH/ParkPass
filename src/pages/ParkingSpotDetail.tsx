@@ -11,7 +11,9 @@ import {
   Zap,
   Shield,
   Umbrella,
-  ArrowLeft
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ParkingSpot } from '../lib/supabase';
@@ -71,6 +73,22 @@ export const ParkingSpotDetail: React.FC = () => {
     fetchSpotDetails();
   }, [id]);
 
+  const nextImage = () => {
+    if (!spot?.images || spot.images.length <= 1) return;
+    setSelectedImage((prev) => (prev + 1) % spot.images.length);
+  };
+
+  const prevImage = () => {
+    if (!spot?.images || spot.images.length <= 1) return;
+    setSelectedImage((prev) => (prev === 0 ? spot.images.length - 1 : prev - 1));
+  };
+
+  const handleBookNow = () => {
+    if (spot) {
+      navigate(`/book/${spot.id}`);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -120,11 +138,29 @@ export const ParkingSpotDetail: React.FC = () => {
           {/* Image Gallery */}
           <div className="relative">
             {spot.images && spot.images.length > 0 ? (
-              <img
-                src={spot.images[selectedImage]}
-                alt={spot.name}
-                className="w-full h-64 md:h-80 object-cover"
-              />
+              <>
+                <img
+                  src={spot.images[selectedImage]}
+                  alt={spot.name}
+                  className="w-full h-64 md:h-80 object-cover"
+                />
+                {spot.images.length > 1 && (
+                  <>
+                    <button 
+                      onClick={prevImage}
+                      className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-80 p-2 rounded-full shadow-md hover:bg-opacity-100 transition-all"
+                    >
+                      <ChevronLeft className="h-5 w-5 text-gray-700" />
+                    </button>
+                    <button 
+                      onClick={nextImage}
+                      className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-80 p-2 rounded-full shadow-md hover:bg-opacity-100 transition-all"
+                    >
+                      <ChevronRight className="h-5 w-5 text-gray-700" />
+                    </button>
+                  </>
+                )}
+              </>
             ) : (
               <div className="w-full h-64 md:h-80 bg-gray-200 flex items-center justify-center">
                 <Car className="h-16 w-16 text-gray-400" />
@@ -134,7 +170,7 @@ export const ParkingSpotDetail: React.FC = () => {
               {formatPrice(spot.price, spot.price_type)}
             </div>
             {spot.images && spot.images.length > 1 && (
-              <div className="absolute bottom-4 left-4 flex space-x-2">
+              <div className="absolute bottom-4 left-0 right-0 flex justify-center space-x-2">
                 {spot.images.map((_, index) => (
                   <button
                     key={index}
@@ -294,12 +330,13 @@ export const ParkingSpotDetail: React.FC = () => {
 
             {/* Action Buttons */}
             <div className="flex flex-col md:flex-row gap-4">
-              <Link
-                to={`/book/${spot.id}`}
-                className="flex-1 bg-blue-600 text-white text-center py-4 px-6 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+              <button
+                onClick={handleBookNow}
+                disabled={spot.available_slots === 0}
+                className="flex-1 bg-blue-600 text-white text-center py-4 px-6 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
               >
-                Book Now
-              </Link>
+                {spot.available_slots > 0 ? 'Book Now' : 'No Spots Available'}
+              </button>
               <button className="flex items-center justify-center space-x-2 px-6 py-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors font-semibold">
                 <Navigation className="h-5 w-5" />
                 <span>Navigate</span>
