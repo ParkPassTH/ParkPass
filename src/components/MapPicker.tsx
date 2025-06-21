@@ -48,7 +48,6 @@ export const MapPicker: React.FC<MapPickerProps> = ({
   const mapInstanceRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
   const [gettingLocation, setGettingLocation] = useState(false);
-  const [mapInitialized, setMapInitialized] = useState(false);
 
   // Clean up function to remove map instance
   const cleanupMap = () => {
@@ -63,19 +62,25 @@ export const MapPicker: React.FC<MapPickerProps> = ({
     const initMap = async () => {
       if (!mapRef.current) return;
       
-      // Clean up any existing map instance before creating a new one
-      cleanupMap();
-      
-      // Clear the container completely to prevent re-initialization errors
-      mapRef.current.innerHTML = '';
-      
       const leaflet = await loadLeaflet();
       if (!leaflet) {
         console.error('Leaflet failed to load');
         return;
       }
 
-      // Initialize map
+      // If map already exists, just update its position
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.setView([latitude, longitude], 13);
+        if (markerRef.current) {
+          markerRef.current.setLatLng([latitude, longitude]);
+        }
+        return;
+      }
+      
+      // Clear the container completely to prevent re-initialization errors
+      mapRef.current.innerHTML = '';
+      
+      // Initialize map only if it doesn't exist
       mapInstanceRef.current = leaflet.map(mapRef.current).setView([latitude, longitude], 13);
 
       // Add tile layer
@@ -103,25 +108,14 @@ export const MapPicker: React.FC<MapPickerProps> = ({
           await reverseGeocode(lat, lng);
         }
       });
-      
-      setMapInitialized(true);
     };
 
-    if (!mapInitialized) {
-      initMap();
-    }
+    initMap();
 
     return () => {
       cleanupMap();
     };
-  }, [latitude, longitude, mapInitialized]);
-
-  useEffect(() => {
-    if (mapInstanceRef.current && markerRef.current && mapInitialized) {
-      markerRef.current.setLatLng([latitude, longitude]);
-      mapInstanceRef.current.setView([latitude, longitude], 13);
-    }
-  }, [latitude, longitude, mapInitialized]);
+  }, [latitude, longitude]);
 
   const reverseGeocode = async (lat: number, lng: number) => {
     try {
