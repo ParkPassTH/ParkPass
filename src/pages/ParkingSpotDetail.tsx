@@ -13,16 +13,19 @@ import {
   Umbrella,
   ArrowLeft,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Calendar,
+  Info,
+  Check
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ParkingSpot } from '../lib/supabase';
-import { ParkingSpotCarousel } from '../components/ParkingSpotCarousel';
 
 export const ParkingSpotDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [isFavorited, setIsFavorited] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [spot, setSpot] = useState<ParkingSpot | null>(null);
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,6 +89,16 @@ export const ParkingSpotDetail: React.FC = () => {
     }
   };
 
+  const nextImage = () => {
+    if (!spot || !spot.images || spot.images.length <= 1) return;
+    setCurrentImageIndex((prev) => (prev + 1) % spot.images.length);
+  };
+
+  const prevImage = () => {
+    if (!spot || !spot.images || spot.images.length <= 1) return;
+    setCurrentImageIndex((prev) => (prev === 0 ? spot.images.length - 1 : prev - 1));
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -118,8 +131,20 @@ export const ParkingSpotDetail: React.FC = () => {
       case 'ev charging': return <Zap className="h-5 w-5 text-green-600" />;
       case 'cctv security': return <Shield className="h-5 w-5 text-blue-600" />;
       case 'covered parking': return <Umbrella className="h-5 w-5 text-purple-600" />;
-      default: return <Car className="h-5 w-5 text-gray-600" />;
+      default: return <Check className="h-5 w-5 text-gray-600" />;
     }
+  };
+
+  const formatOperatingHours = () => {
+    if (typeof spot.operating_hours === 'string') {
+      return spot.operating_hours;
+    }
+    
+    if (spot.operating_hours?.["24_7"]) {
+      return "24/7";
+    }
+    
+    return "Check details";
   };
 
   return (
@@ -135,27 +160,66 @@ export const ParkingSpotDetail: React.FC = () => {
           {/* Image Gallery */}
           <div className="relative">
             {spot.images && spot.images.length > 0 ? (
-              <ParkingSpotCarousel images={spot.images} alt={spot.name} />
+              <div className="relative w-full h-[400px] overflow-hidden">
+                <img
+                  src={spot.images[currentImageIndex]}
+                  alt={spot.name}
+                  className="w-full h-full object-cover"
+                />
+                
+                {spot.images.length > 1 && (
+                  <>
+                    <button
+                      onClick={prevImage}
+                      className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-80 p-2 rounded-full shadow-md hover:bg-opacity-100 transition-all z-10"
+                      aria-label="Previous image"
+                    >
+                      <ChevronLeft className="h-6 w-6 text-gray-700" />
+                    </button>
+                    
+                    <button
+                      onClick={nextImage}
+                      className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-80 p-2 rounded-full shadow-md hover:bg-opacity-100 transition-all z-10"
+                      aria-label="Next image"
+                    >
+                      <ChevronRight className="h-6 w-6 text-gray-700" />
+                    </button>
+                    
+                    <div className="absolute bottom-4 left-0 right-0 flex justify-center space-x-2 z-10">
+                      {spot.images.map((_, index) => (
+                        <button
+                          key={index}
+                          onClick={() => setCurrentImageIndex(index)}
+                          className={`w-3 h-3 rounded-full transition-colors ${
+                            currentImageIndex === index ? 'bg-white' : 'bg-white bg-opacity-50'
+                          }`}
+                          aria-label={`Go to image ${index + 1}`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             ) : (
               <div className="w-full h-64 md:h-80 bg-gray-200 flex items-center justify-center">
                 <Car className="h-16 w-16 text-gray-400" />
               </div>
             )}
-            <div className="absolute top-4 right-4 bg-white px-3 py-2 rounded-full font-semibold text-lg">
+            <div className="absolute top-4 right-4 bg-white px-3 py-2 rounded-full font-semibold text-lg shadow-md">
               {formatPrice(spot.price, spot.price_type)}
             </div>
           </div>
 
           <div className="p-6">
             {/* Header */}
-            <div className="flex items-start justify-between mb-4">
+            <div className="flex items-start justify-between mb-6">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
                   {spot.name}
                 </h1>
-                <div className="flex items-center space-x-1 text-gray-600 mb-2">
+                <div className="flex items-center space-x-1 text-gray-600 mb-3">
                   <MapPin className="h-5 w-5" />
-                  <span>{spot.address}</span>
+                  <span className="text-lg">{spot.address}</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <div className="flex items-center space-x-1">
@@ -178,57 +242,58 @@ export const ParkingSpotDetail: React.FC = () => {
             </div>
 
             {/* Quick Info */}
-            <div className="grid md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+            <div className="grid md:grid-cols-3 gap-4 mb-8 p-5 bg-blue-50 rounded-xl">
               <div className="text-center">
-                <div className="flex items-center justify-center space-x-1 text-sm text-gray-600 mb-1">
-                  <Clock className="h-4 w-4" />
-                  <span>Opening & Closing Times</span>
+                <div className="flex items-center justify-center space-x-1 text-sm text-blue-700 mb-2">
+                  <Clock className="h-5 w-5" />
+                  <span className="font-medium">Opening & Closing Times</span>
                 </div>
-                <div className="font-semibold">
-                  {typeof spot.operating_hours === 'string' 
-                    ? spot.operating_hours 
-                    : spot.operating_hours?.["24_7"] 
-                      ? "24/7" 
-                      : "Check details"}
+                <div className="font-semibold text-blue-900">
+                  {formatOperatingHours()}
                 </div>
               </div>
               <div className="text-center">
-                <div className="flex items-center justify-center space-x-1 text-sm text-gray-600 mb-1">
-                  <Car className="h-4 w-4" />
-                  <span>Available</span>
+                <div className="flex items-center justify-center space-x-1 text-sm text-blue-700 mb-2">
+                  <Car className="h-5 w-5" />
+                  <span className="font-medium">Availability</span>
                 </div>
-                <div className="font-semibold">
+                <div className="font-semibold text-blue-900">
                   {spot.available_slots} / {spot.total_slots} spots
                 </div>
               </div>
               <div className="text-center">
-                <div className="flex items-center justify-center space-x-1 text-sm text-gray-600 mb-1">
-                  <Phone className="h-4 w-4" />
-                  <span>Contact</span>
+                <div className="flex items-center justify-center space-x-1 text-sm text-blue-700 mb-2">
+                  <Calendar className="h-5 w-5" />
+                  <span className="font-medium">Booking Type</span>
                 </div>
-                <div className="font-semibold">Contact Owner</div>
+                <div className="font-semibold text-blue-900 capitalize">
+                  {spot.price_type} rate
+                </div>
               </div>
             </div>
 
             {/* Description */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <div className="mb-8">
+              <h3 className="text-xl font-semibold text-gray-900 mb-3 flex items-center">
+                <Info className="h-5 w-5 mr-2" />
                 About this parking spot
               </h3>
-              <p className="text-gray-600">{spot.description || 'No description provided.'}</p>
+              <p className="text-gray-700 leading-relaxed">
+                {spot.description || 'No description provided for this parking spot.'}
+              </p>
             </div>
 
             {/* Amenities */}
             {spot.amenities && spot.amenities.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">
+              <div className="mb-8">
+                <h3 className="text-xl font-semibold text-gray-900 mb-4">
                   Amenities
                 </h3>
-                <div className="grid md:grid-cols-2 gap-3">
+                <div className="grid md:grid-cols-2 gap-4">
                   {spot.amenities.map((amenity, index) => (
-                    <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <div key={index} className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg border border-gray-100">
                       {getAmenityIcon(amenity)}
-                      <span className="text-gray-700">{amenity}</span>
+                      <span className="text-gray-800 font-medium">{amenity}</span>
                     </div>
                   ))}
                 </div>
@@ -236,45 +301,53 @@ export const ParkingSpotDetail: React.FC = () => {
             )}
 
             {/* Reviews */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">
+            <div className="mb-8">
+              <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                <Star className="h-5 w-5 mr-2 text-yellow-500" />
                 Reviews
               </h3>
               <div className="space-y-4">
                 {reviews.length > 0 ? (
                   reviews.map((review) => (
-                    <div key={review.id} className="p-4 bg-gray-50 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
+                    <div key={review.id} className="p-5 bg-gray-50 rounded-lg border border-gray-100">
+                      <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center space-x-2">
-                          <span className="font-semibold text-gray-900">
-                            {review.is_anonymous ? 'Anonymous User' : review.profiles?.name || 'User'}
-                          </span>
-                          <div className="flex items-center space-x-1">
-                            {[...Array(5)].map((_, i) => (
-                              <Star
-                                key={i}
-                                className={`h-4 w-4 ${
-                                  i < review.rating
-                                    ? 'text-yellow-400 fill-current'
-                                    : 'text-gray-300'
-                                }`}
-                              />
-                            ))}
+                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                            <span className="text-blue-600 font-semibold">
+                              {review.is_anonymous ? 'A' : review.profiles?.name?.[0] || 'U'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="font-semibold text-gray-900">
+                              {review.is_anonymous ? 'Anonymous User' : review.profiles?.name || 'User'}
+                            </span>
+                            <div className="flex items-center space-x-1">
+                              {[...Array(5)].map((_, i) => (
+                                <Star
+                                  key={i}
+                                  className={`h-4 w-4 ${
+                                    i < review.rating
+                                      ? 'text-yellow-400 fill-current'
+                                      : 'text-gray-300'
+                                  }`}
+                                />
+                              ))}
+                            </div>
                           </div>
                         </div>
                         <span className="text-sm text-gray-500">
                           {new Date(review.created_at).toLocaleDateString()}
                         </span>
                       </div>
-                      {review.comment && <p className="text-gray-700">{review.comment}</p>}
+                      {review.comment && <p className="text-gray-700 mb-3">{review.comment}</p>}
                       {review.photos && review.photos.length > 0 && (
-                        <div className="flex space-x-2 mt-2">
+                        <div className="flex flex-wrap gap-2 mt-3">
                           {review.photos.map((photo: string, index: number) => (
                             <img
                               key={index}
                               src={photo}
                               alt={`Review photo ${index + 1}`}
-                              className="w-16 h-16 object-cover rounded-lg"
+                              className="w-20 h-20 object-cover rounded-lg"
                             />
                           ))}
                         </div>
@@ -282,9 +355,10 @@ export const ParkingSpotDetail: React.FC = () => {
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-6 text-gray-500">
+                  <div className="text-center py-8 bg-gray-50 rounded-lg">
                     <Star className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                    <p>No reviews yet</p>
+                    <p className="text-gray-600 font-medium">No reviews yet</p>
+                    <p className="text-sm text-gray-500 mt-1">Be the first to review this parking spot</p>
                   </div>
                 )}
               </div>
@@ -295,7 +369,7 @@ export const ParkingSpotDetail: React.FC = () => {
               <button
                 onClick={handleBookNow}
                 disabled={spot.available_slots === 0}
-                className="flex-1 bg-blue-600 text-white text-center py-4 px-6 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 bg-blue-600 text-white text-center py-4 px-6 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-lg"
               >
                 {spot.available_slots > 0 ? 'Book Now' : 'No Spots Available'}
               </button>
@@ -306,6 +380,15 @@ export const ParkingSpotDetail: React.FC = () => {
                 <Navigation className="h-5 w-5" />
                 <span>Navigate</span>
               </button>
+              {spot.phone && (
+                <a 
+                  href={`tel:${spot.phone}`}
+                  className="flex items-center justify-center space-x-2 px-6 py-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors font-semibold"
+                >
+                  <Phone className="h-5 w-5" />
+                  <span>Call</span>
+                </a>
+              )}
             </div>
           </div>
         </div>
