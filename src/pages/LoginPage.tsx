@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MapPin, Eye, EyeOff, Mail, Lock, User, Building2, Car, AlertCircle, RefreshCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,6 +11,7 @@ export const LoginPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showEmailConfirmation, setShowEmailConfirmation] = useState(false);
   const [pendingEmail, setPendingEmail] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -23,6 +24,21 @@ export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { signIn, signUp, resendConfirmation } = useAuth();
 
+  // Check for saved credentials on component mount
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('rememberedEmail');
+    const savedPassword = localStorage.getItem('rememberedPassword');
+    
+    if (savedEmail && savedPassword) {
+      setFormData(prev => ({
+        ...prev,
+        email: savedEmail,
+        password: savedPassword
+      }));
+      setRememberMe(true);
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -34,6 +50,16 @@ export const LoginPage: React.FC = () => {
       }
 
       if (mode === 'login') {
+        // Save credentials if remember me is checked
+        if (rememberMe) {
+          localStorage.setItem('rememberedEmail', formData.email);
+          localStorage.setItem('rememberedPassword', formData.password);
+        } else {
+          // Clear any saved credentials if remember me is unchecked
+          localStorage.removeItem('rememberedEmail');
+          localStorage.removeItem('rememberedPassword');
+        }
+
         await signIn(formData.email, formData.password);
         
         // Determine redirect based on email patterns for demo
@@ -438,6 +464,8 @@ export const LoginPage: React.FC = () => {
                 <label className="flex items-center">
                   <input 
                     type="checkbox" 
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
                     className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50" 
                   />
                   <span className="ml-2 text-sm text-gray-600">Remember me</span>

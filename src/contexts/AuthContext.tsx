@@ -149,6 +149,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await supabase.auth.signOut();
       setUser(null);
       setProfile(null);
+      
+      // Clear remembered credentials on logout
+      localStorage.removeItem('rememberedEmail');
+      localStorage.removeItem('rememberedPassword');
     } finally {
       setLoading(false);
     }
