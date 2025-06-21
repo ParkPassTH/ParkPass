@@ -98,22 +98,22 @@ const createSupabaseClient = () => {
                   single: async () => {
                     console.log('Mock single query');
                     // Simulate no profile found for initial case
-                    return { data: null, error: { code: 'PGRST116', message: 'No rows found' } };
+                    return Promise.resolve({ data: null, error: { code: 'PGRST116', message: 'No rows found' } });
                   },
                   maybeSingle: async () => {
                     console.log('Mock maybeSingle query');
-                    // Simulate no profile found
-                    return { data: null, error: null };
+                    // Simulate no profile found - return immediately resolved promise
+                    return Promise.resolve({ data: null, error: null });
                   },
                   then: async (callback: any) => {
                     console.log('Mock then callback');
-                    return callback({ data: [], error: null });
+                    return Promise.resolve(callback({ data: [], error: null }));
                   }
                 };
               },
               then: async (callback: any) => {
                 console.log('Mock select then callback');
-                return callback({ data: [], error: null });
+                return Promise.resolve(callback({ data: [], error: null }));
               }
             };
           },
@@ -129,7 +129,7 @@ const createSupabaseClient = () => {
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
                   };
-                  return { data: insertedData, error: null };
+                  return Promise.resolve({ data: insertedData, error: null });
                 }
               }),
               then: async (callback: any) => {
@@ -139,7 +139,7 @@ const createSupabaseClient = () => {
                   created_at: new Date().toISOString(),
                   updated_at: new Date().toISOString()
                 };
-                return callback({ data: insertedData, error: null });
+                return Promise.resolve(callback({ data: insertedData, error: null }));
               }
             };
           },
@@ -151,7 +151,7 @@ const createSupabaseClient = () => {
                 return { 
                   then: async (callback: any) => {
                     console.log('Mock update then callback');
-                    return callback({ data: null, error: null });
+                    return Promise.resolve(callback({ data: null, error: null }));
                   }
                 };
               }
@@ -163,7 +163,7 @@ const createSupabaseClient = () => {
               return {
                 then: async (callback: any) => {
                   console.log('Mock delete then callback');
-                  return callback({ data: null, error: null });
+                  return Promise.resolve(callback({ data: null, error: null }));
                 }
               };
             }
@@ -172,7 +172,7 @@ const createSupabaseClient = () => {
       },
       storage: {
         from: (bucket: string) => ({
-          upload: async (path: string, file: File) => ({ data: { path }, error: null }),
+          upload: async (path: string, file: File) => Promise.resolve({ data: { path }, error: null }),
           getPublicUrl: (path: string) => ({ data: { publicUrl: `mock-url/${path}` } })
         })
       }
