@@ -7,7 +7,7 @@ import { MapPin, Car, Wifi, Camera, Shield } from 'lucide-react';
 import { useParkingSpots } from '../hooks/useSupabase';
 import { ParkingSpot } from '../services/supabaseService';
 import { SearchFilters } from '../components/SearchFilters';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { LatLngExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -20,12 +20,22 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
+// Component to update map view when center changes
+const ChangeMapView = ({ center }: { center: LatLngExpression }) => {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center, 13);
+  }, [center, map]);
+  return null;
+};
+
 export const HomePage = () => {
   const { spots, loading, error } = useParkingSpots();
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredSpots, setFilteredSpots] = useState<ParkingSpot[]>([]);
   const [showMap, setShowMap] = useState(true);
   const [mapCenter, setMapCenter] = useState<LatLngExpression>([13.7563, 100.5018]); // Default to Bangkok
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -44,6 +54,7 @@ export const HomePage = () => {
   };
 
   const handleFindNearMe = () => {
+    setIsGettingLocation(true);
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -56,11 +67,18 @@ export const HomePage = () => {
             return distA - distB;
           });
           setFilteredSpots(sortedSpots);
+          setIsGettingLocation(false);
         },
         (error) => {
           console.error('Error getting location:', error);
-        }
+          alert('Unable to get your location. Please enable location services and try again.');
+          setIsGettingLocation(false);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
+    } else {
+      alert('Geolocation is not supported by this browser');
+      setIsGettingLocation(false);
     }
   };
 
@@ -257,6 +275,9 @@ export const HomePage = () => {
                   </Popup>
                 </Marker>
               ))}
+              
+              {/* Component to update map view when center changes */}
+              <ChangeMapView center={mapCenter} />
             </MapContainer>
           </div>
         )}

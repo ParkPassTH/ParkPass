@@ -19,10 +19,18 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
     parkingType: 'all',
     amenities: []
   });
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     onSearch(searchQuery);
+  };
+
+  const handleFindNearMeClick = () => {
+    setIsGettingLocation(true);
+    onFindNearMe();
+    // Reset the loading state after a timeout in case the geolocation callback doesn't fire
+    setTimeout(() => setIsGettingLocation(false), 10000);
   };
 
   return (
@@ -42,11 +50,21 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
         <div className="flex gap-3">
           <button
             type="button"
-            onClick={onFindNearMe}
-            className="flex items-center space-x-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            onClick={handleFindNearMeClick}
+            disabled={isGettingLocation}
+            className="flex items-center space-x-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors font-medium"
           >
-            <MapPin className="h-5 w-5" />
-            <span className="hidden md:inline">Find Near Me</span>
+            {isGettingLocation ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <span className="hidden md:inline">Locating...</span>
+              </>
+            ) : (
+              <>
+                <MapPin className="h-5 w-5" />
+                <span className="hidden md:inline">Find Near Me</span>
+              </>
+            )}
           </button>
           
           <button
@@ -73,10 +91,14 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                   min="0"
                   max="500"
                   value={filters.priceRange[1]}
-                  onChange={(e) => setFilters(prev => ({
-                    ...prev,
-                    priceRange: [0, parseInt(e.target.value)]
-                  }))}
+                  onChange={(e) => {
+                    const newFilters = {
+                      ...filters,
+                      priceRange: [0, parseInt(e.target.value)]
+                    };
+                    setFilters(newFilters);
+                    onFilter(newFilters);
+                  }}
                   className="flex-1"
                 />
                 <span className="text-sm text-gray-600">
@@ -91,7 +113,11 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
               </label>
               <select
                 value={filters.parkingType}
-                onChange={(e) => setFilters(prev => ({ ...prev, parkingType: e.target.value }))}
+                onChange={(e) => {
+                  const newFilters = { ...filters, parkingType: e.target.value };
+                  setFilters(newFilters);
+                  onFilter(newFilters);
+                }}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               >
                 <option value="all">All Types</option>
@@ -111,6 +137,14 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                     <input
                       type="checkbox"
                       className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                      onChange={(e) => {
+                        const newAmenities = e.target.checked
+                          ? [...filters.amenities, amenity]
+                          : filters.amenities.filter(a => a !== amenity);
+                        const newFilters = { ...filters, amenities: newAmenities };
+                        setFilters(newFilters);
+                        onFilter(newFilters);
+                      }}
                     />
                     <span className="ml-2 text-sm text-gray-700">{amenity}</span>
                   </label>
