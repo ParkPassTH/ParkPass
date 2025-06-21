@@ -66,11 +66,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setTimeout(() => reject(new Error('Profile loading timeout')), 5000);
       });
 
-      const profilePromise = supabase
+      const profilePromise = Promise.resolve(supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .maybeSingle();
+        .maybeSingle());
 
       const { data: profile, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
 
@@ -162,11 +162,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setTimeout(() => reject(new Error('Profile creation timeout')), 5000);
       });
 
-      const insertPromise = supabase
+      const insertPromise = Promise.resolve(supabase
         .from('profiles')
         .insert(basicProfile)
         .select()
-        .single();
+        .single());
 
       const { data: newProfile, error } = await Promise.race([insertPromise, timeoutPromise]) as any;
 
