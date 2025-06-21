@@ -60,6 +60,9 @@ export const MapPicker: React.FC<MapPickerProps> = ({
         markerRef.current = null;
       }
       
+      // Clear the container completely to prevent re-initialization errors
+      mapRef.current.innerHTML = '';
+      
       const leaflet = await loadLeaflet();
       if (!leaflet) {
         console.error('Leaflet failed to load');
